@@ -1,0 +1,81 @@
+{
+  "_doc": "섹터·맵 배치 데이터. 좌표는 로컬 axial(q,r). 명시 안 된 헥스는 EMPTY. TRANSCENDENT = 초월 차원(구 LOST_PLANET). docs/data/map.md 확정본.",
+  "baseLocalHexes": [
+    "0,-2", "1,-2", "2,-2", "-1,-1", "0,-1", "1,-1", "2,-1", "-2,0", "-1,0", "0,0",
+    "1,0", "2,0", "-2,1", "-1,1", "0,1", "1,1", "-2,2", "-1,2", "0,2"
+  ],
+  "baseSectors": [
+    { "id": "SECTOR_1",  "planets": { "-1,0": "SWAMP", "1,-1": "TERRA", "-2,1": "DESERT", "2,-1": "TRANSDIM", "0,2": "VOLCANIC", "1,1": "OXIDE" } },
+    { "id": "SECTOR_2",  "planets": { "0,-2": "TITANIUM", "-1,-1": "OXIDE", "1,-1": "ICE", "-1,1": "SWAMP", "2,-1": "DESERT", "-1,2": "VOLCANIC", "1,1": "TRANSDIM" } },
+    { "id": "SECTOR_3",  "planets": { "0,-2": "TRANSDIM", "-1,0": "GAIA", "1,0": "ICE", "2,-1": "TITANIUM", "-1,2": "TERRA", "0,2": "DESERT" } },
+    { "id": "SECTOR_4",  "planets": { "0,-2": "TITANIUM", "0,-1": "VOLCANIC", "-2,1": "ICE", "-1,1": "OXIDE", "1,0": "SWAMP", "2,0": "TERRA" } },
+    { "id": "SECTOR_5",  "planets": { "0,-2": "ICE", "-1,0": "GAIA", "2,-2": "TRANSDIM", "2,-1": "VOLCANIC", "-1,2": "OXIDE", "0,2": "DESERT" } },
+    { "id": "SECTOR_6",  "planets": { "1,-2": "TRANSDIM", "-1,0": "SWAMP", "1,-1": "TERRA", "0,1": "GAIA", "1,1": "TRANSDIM", "2,0": "DESERT" } },
+    { "id": "SECTOR_7",  "planets": { "0,-1": "VOLCANIC", "1,-2": "SWAMP", "-2,0": "TRANSDIM", "-1,1": "GAIA", "1,0": "GAIA", "0,2": "TITANIUM" } },
+    { "id": "SECTOR_8",  "planets": { "0,-2": "TERRA", "0,-1": "ICE", "2,-2": "TRANSDIM", "-1,1": "OXIDE", "1,0": "TITANIUM", "-1,2": "TRANSDIM" } },
+    { "id": "SECTOR_9",  "planets": { "-1,-1": "OXIDE", "1,-2": "TRANSDIM", "2,-2": "ICE", "-1,1": "TITANIUM", "1,0": "GAIA", "-2,2": "SWAMP" } },
+    { "id": "SECTOR_10", "planets": { "1,-2": "TRANSDIM", "-1,0": "DESERT", "2,-2": "TRANSDIM", "1,0": "GAIA", "-2,2": "TERRA", "-1,2": "VOLCANIC" } }
+  ],
+  "deepLocalHexes": ["0,0", "1,0", "0,1"],
+  "deepSectors": [
+    { "id": "DEEP_SECTOR_1", "front": { "0,0": "TRANSCENDENT", "0,1": "ASTEROIDS" }, "back": { "0,1": "ASTEROIDS" } },
+    { "id": "DEEP_SECTOR_2", "front": { "0,0": "TRANSDIM", "0,1": "TRANSCENDENT" }, "back": { "0,0": "ASTEROIDS" } },
+    { "id": "DEEP_SECTOR_3", "front": { "0,0": "TRANSDIM", "1,0": "ASTEROIDS" }, "back": { "1,0": "ASTEROIDS" } },
+    { "id": "DEEP_SECTOR_4", "front": { "0,0": "TRANSCENDENT", "1,0": "ASTEROIDS" }, "back": { "1,0": "ASTEROIDS" } },
+    { "id": "DEEP_SECTOR_5", "front": { "0,0": "TRANSCENDENT" }, "back": { "0,0": "TRANSCENDENT", "1,0": "ASTEROIDS" } },
+    { "id": "DEEP_SECTOR_6", "front": { "1,0": "TRANSCENDENT" }, "back": { "0,0": "ASTEROIDS", "1,0": "ASTEROIDS" } },
+    { "id": "DEEP_SECTOR_7", "front": { "0,0": "TRANSDIM" }, "back": { "0,1": "ASTEROIDS" } },
+    { "id": "DEEP_SECTOR_8", "front": { "0,0": "TRANSCENDENT" }, "back": { "0,1": "ASTEROIDS" } }
+  ],
+  "singleHexTiles": [
+    { "id": "SINGLE_TRANSCENDENT_1", "tileNumber": 1,  "planet": "TRANSCENDENT" },
+    { "id": "SINGLE_ASTEROIDS_1",   "tileNumber": 2,  "planet": "ASTEROIDS" },
+    { "id": "SINGLE_ASTEROIDS_2",   "tileNumber": 3,  "planet": "ASTEROIDS" },
+    { "id": "SINGLE_ASTEROIDS_3",   "tileNumber": 4,  "planet": "ASTEROIDS" },
+    { "id": "SINGLE_ASTEROIDS_4",   "tileNumber": 5,  "planet": "ASTEROIDS" },
+    { "id": "FLEET_TF_MARS",        "tileNumber": 6,  "planet": "EMPTY", "ship": "TF_MARS" },
+    { "id": "FLEET_REBELLION",      "tileNumber": 7,  "planet": "EMPTY", "ship": "REBELLION" },
+    { "id": "FLEET_ECLIPSE",        "tileNumber": 8,  "planet": "EMPTY", "ship": "ECLIPSE" },
+    { "id": "SINGLE_EMPTY_1",       "tileNumber": 9,  "planet": "EMPTY" },
+    { "id": "FLEET_TWILIGHT",       "tileNumber": 10, "planet": "EMPTY", "ship": "TWILIGHT" }
+  ],
+  "positions": {
+    "base": [
+      { "positionNo": 1,  "q": -4, "r": -1 },
+      { "positionNo": 2,  "q": 1,  "r": -5 },
+      { "positionNo": 3,  "q": 6,  "r": -9 },
+      { "positionNo": 4,  "q": -5, "r": 4 },
+      { "positionNo": 5,  "q": 0,  "r": 0 },
+      { "positionNo": 6,  "q": 5,  "r": -4 },
+      { "positionNo": 7,  "q": 10, "r": -8 },
+      { "positionNo": 8,  "q": -1, "r": 5 },
+      { "positionNo": 9,  "q": 4,  "r": 1 },
+      { "positionNo": 10, "q": 9,  "r": -3 }
+    ],
+    "deep": [
+      { "positionNo": 11, "q": -2, "r": -5,  "rotation": 60 },
+      { "positionNo": 12, "q": 3,  "r": -9,  "rotation": 60 },
+      { "positionNo": 13, "q": 9,  "r": -11, "rotation": 0 },
+      { "positionNo": 14, "q": 12, "r": -7,  "rotation": 60 },
+      { "positionNo": 15, "q": 7,  "r": 0,   "rotation": 0 },
+      { "positionNo": 16, "q": 2,  "r": 4,   "rotation": 0 },
+      { "positionNo": 17, "q": -4, "r": 6,   "rotation": 60 },
+      { "positionNo": 18, "q": -7, "r": 2,   "rotation": 0 }
+    ],
+    "single": [
+      { "positionNo": 21, "q": -3, "r": 1 },
+      { "positionNo": 22, "q": -1, "r": -2 },
+      { "positionNo": 23, "q": 2,  "r": -3 },
+      { "positionNo": 24, "q": 4,  "r": -6 },
+      { "positionNo": 25, "q": 7,  "r": -7 },
+      { "positionNo": 26, "q": 8,  "r": -5 },
+      { "positionNo": 27, "q": 6,  "r": -2 },
+      { "positionNo": 28, "q": 3,  "r": -1 },
+      { "positionNo": 29, "q": 1,  "r": 2 },
+      { "positionNo": 30, "q": -2, "r": 3 }
+    ]
+  },
+  "fleetAdjacency": [
+    [21, 22], [22, 23], [23, 24], [24, 25], [25, 26], [26, 27], [27, 28], [28, 29], [29, 30], [30, 21], [23, 28]
+  ]
+}

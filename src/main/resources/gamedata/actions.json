@@ -1,0 +1,48 @@
+{
+  "_doc": "공용 파워 액션 + Lost Fleet 함대 액션 + 인공물 (docs/data/tiles-scoring.md 확정본). 파워/함대 액션은 라운드당 게임 전체 1회.",
+  "powerActions": [
+    { "id": "PWR_KNOWLEDGE",   "cost": { "power": 7 }, "gain": { "knowledge": 3 } },
+    { "id": "PWR_TERRAFORM_2", "cost": { "power": 5 }, "special": "BUILD_MINE_TERRAFORM_2_FREE" },
+    { "id": "PWR_ORE",         "cost": { "power": 4 }, "gain": { "ore": 2 } },
+    { "id": "PWR_CREDIT",      "cost": { "power": 4 }, "gain": { "credits": 7 } },
+    { "id": "PWR_KNOWLEDGE_2", "cost": { "power": 4 }, "gain": { "knowledge": 2 } },
+    { "id": "PWR_TERRAFORM",   "cost": { "power": 3 }, "special": "BUILD_MINE_TERRAFORM_1_FREE" },
+    { "id": "PWR_TOKEN",       "cost": { "power": 3 }, "gain": { "powerTokens": 2 } }
+  ],
+  "fleetActions": [
+    { "id": "TF_MARS_VP",        "ship": "TF_MARS",   "cost": { "qic": 2 },                "special": "VP_2_PLUS_1_PER_TECH_TILE", "qicAction": true },
+    { "id": "TF_MARS_GAIAFORM",  "ship": "TF_MARS",   "cost": { "power": 2 },              "special": "INSTANT_GAIAFORM" },
+    { "id": "TF_MARS_TERRAFORM", "ship": "TF_MARS",   "cost": { "credits": 3 },            "special": "BUILD_MINE_TERRAFORM_1_FREE" },
+    { "id": "ECLIPSE_VP",        "ship": "ECLIPSE",   "cost": { "qic": 2 },                "special": "VP_2_PLUS_1_PER_PLANET_TYPE", "qicAction": true },
+    { "id": "ECLIPSE_TECH",      "ship": "ECLIPSE",   "cost": { "power": 3, "knowledge": 2 }, "special": "ADVANCE_TRACK_1" },
+    { "id": "ECLIPSE_MINE",      "ship": "ECLIPSE",   "cost": { "credits": 6 },            "special": "BUILD_MINE_ON_ASTEROIDS" },
+    { "id": "REBELLION_TECH",    "ship": "REBELLION", "cost": { "qic": 3 },                "special": "GAIN_BASIC_TECH_TILE", "qicAction": true },
+    { "id": "REBELLION_UPGRADE", "ship": "REBELLION", "cost": { "power": 3, "ore": 1 },    "special": "UPGRADE_MINE_TO_TS" },
+    { "id": "REBELLION_CONVERT", "ship": "REBELLION", "cost": { "knowledge": 2 },          "gain": { "qic": 1, "credits": 2 } },
+    { "id": "TWILIGHT_FED",      "ship": "TWILIGHT",  "cost": { "qic": 3 },                "special": "REUSE_FEDERATION_TOKEN", "qicAction": true },
+    { "id": "TWILIGHT_UPGRADE",  "ship": "TWILIGHT",  "cost": { "power": 3, "ore": 2 },    "special": "UPGRADE_TS_TO_LAB_WITH_TECH_TILE" },
+    { "id": "TWILIGHT_NAV",      "ship": "TWILIGHT",  "cost": { "knowledge": 1 },          "special": "BUILD_MINE_RANGE_PLUS_3" },
+    { "id": "TWILIGHT_ARTIFACT", "ship": "TWILIGHT",  "cost": { "burnTokens": 6 },         "special": "ACQUIRE_ARTIFACT" }
+  ],
+  "fleet": {
+    "entryVp": 5,
+    "maxProbesPerPlayer": 3,
+    "entryOrderPowerCharge": [0, 2, 2, 3]
+  },
+  "artifacts": [
+    { "id": "ARTIFACT_1",  "type": "IMMEDIATE", "gain": { "knowledge": 3, "qic": 1 } },
+    { "id": "ARTIFACT_2",  "type": "IMMEDIATE", "gain": { "credits": 5, "ore": 2 } },
+    { "id": "ARTIFACT_3",  "type": "IMMEDIATE", "gain": { "credits": 3, "ore": 3 } },
+    { "id": "ARTIFACT_4",  "type": "INCOME",    "income": { "powerTokensBowl3": 2 } },
+    { "id": "ARTIFACT_5",  "type": "INCOME",    "income": { "ore": 1, "knowledge": 1 } },
+    { "id": "ARTIFACT_6",  "type": "IMMEDIATE", "special": "VP_3_PER_DEEP_SECTOR_WITH_BUILDING" },
+    { "id": "ARTIFACT_7",  "type": "IMMEDIATE", "special": "VP_7_ASTEROIDS_AS_PLANET_TYPE_BUILDING_PLUS_1" },
+    { "id": "ARTIFACT_8",  "type": "IMMEDIATE", "special": "VP_7_TRANSCENDENT_AS_PLANET_TYPE_BUILDING_PLUS_1" },
+    { "id": "ARTIFACT_9",  "type": "IMMEDIATE", "special": "VP_3_PER_SCIENCE_LEVEL" },
+    { "id": "ARTIFACT_10", "type": "IMMEDIATE", "special": "VP_3_PER_GAIA_LEVEL" },
+    { "id": "ARTIFACT_11", "type": "IMMEDIATE", "special": "VP_3_PER_TRACK_LEVEL3_PLUS" },
+    { "id": "ARTIFACT_12", "type": "IMMEDIATE", "special": "VP_3_PLUS_1_PER_PLANET_TYPE" },
+    { "id": "ARTIFACT_13", "type": "SPECIAL",   "special": "FEDERATION_TOKEN_DOUBLE_USE" }
+  ],
+  "artifactSetup": { "drawCount": 4, "acquireCost": { "burnTokens": 6 } }
+}

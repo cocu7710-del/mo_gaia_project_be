@@ -1,0 +1,25 @@
+{
+  "_doc": "게임 공통 상수 (docs 확정본).",
+  "rulesetVersion": "1.0.0",
+  "playerCount": 4,
+  "rounds": 6,
+  "terraformRing": ["TERRA", "VOLCANIC", "OXIDE", "DESERT", "SWAMP", "TITANIUM", "ICE"],
+  "specialPlanetShovels": { "TRANSCENDENT": 3, "BLACK_PLANET": 3 },
+  "buildings": {
+    "MINE":                { "stock": 8, "power": 1, "cost": { "credits": 2, "ore": 1 } },
+    "TRADING_STATION":     { "stock": 4, "power": 2, "cost": { "credits": 6, "ore": 2 }, "costNearOpponent": { "credits": 3, "ore": 2 } },
+    "RESEARCH_LAB":        { "stock": 3, "power": 2, "cost": { "credits": 5, "ore": 3 } },
+    "PLANETARY_INSTITUTE": { "stock": 1, "power": 3, "cost": { "credits": 6, "ore": 4 } },
+    "ACADEMY":             { "stock": 2, "power": 3, "cost": { "credits": 6, "ore": 6 } }
+  },
+  "buildingIncome": {
+    "mineOre":            [0, 1, 2, 2, 3, 4, 5, 6, 7],
+    "tradingStationCredits": [0, 3, 7, 11, 16],
+    "researchLabKnowledge":  [0, 1, 2, 3],
+    "academyKnowledge": 2
+  },
+  "leech": { "radius": 2, "autoAcceptFreePower": true, "round6PassedOnlyFreePower": true },
+  "powerBurn": { "fromBowl": 2, "remove": 2, "gain": 1 },
+  "income": { "playerChoosesPowerOrder": true },
+  "undo": { "policies": ["FREE", "CONSENT", "NONE"], "default": "CONSENT" }
+}

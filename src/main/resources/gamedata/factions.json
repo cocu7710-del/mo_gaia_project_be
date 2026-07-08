@@ -1,0 +1,137 @@
+{
+  "_doc": "종족 데이터 (docs/data/factions.md 확정본). start = 기본값 — 시작 트랙의 레벨 1 보상은 게임 셋업 시 엔진이 지급한다 (예: 기오덴 테라포밍1 → +광석2, 글린 항해1 → +QIC1(→광석 변환), 가이아1 → +가이아포머1). 기본값: baseIncome {ore:1,knowledge:1}, piIncome {powerCharge:4,powerToken:1}, initialMines 2, 함대 입장 VP 5.",
+  "factions": [
+    {
+      "id": "XENOS", "nameKo": "제노스", "homePlanet": "DESERT",
+      "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 1, "bowl1": 2, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": { "ai": 1 },
+      "piIncome": { "powerCharge": 4, "powerToken": 1, "qic": 1 },
+      "setup": { "initialMines": 3 },
+      "abilities": ["FREE_ORE_TO_POWER3", "PI_FEDERATION_POWER_6"]
+    },
+    {
+      "id": "GLEENS", "nameKo": "글린", "homePlanet": "DESERT",
+      "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 0, "bowl1": 2, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": { "navigation": 1 },
+      "piIncome": { "powerCharge": 4, "powerToken": 1, "ore": 1 },
+      "abilities": ["QIC_TO_ORE_UNTIL_QIC_ACADEMY", "GAIA_PLANET_VP_2", "GAIA_COST_ORE_INSTEAD_QIC", "PI_GLEENS_FED_TOKEN", "ACTION_JUMP_RANGE_2"]
+    },
+    {
+      "id": "TAKLONS", "nameKo": "타클론", "homePlanet": "SWAMP",
+      "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 1, "bowl1": 2, "bowl2": 4, "bowl3": 0, "vp": 10, "brainstone": "BOWL1" },
+      "startTracks": {},
+      "abilities": ["BRAINSTONE", "PI_LEECH_EXTRA_TOKEN", "LEECH_1_MANUAL_WITH_PI"]
+    },
+    {
+      "id": "AMBAS", "nameKo": "엠바스", "homePlanet": "SWAMP",
+      "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 1, "bowl1": 2, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": { "navigation": 1 },
+      "baseIncome": { "ore": 2, "knowledge": 1 },
+      "piIncome": { "powerCharge": 4, "powerToken": 2 },
+      "abilities": ["PI_ACTION_SWAP_MINE_PI"]
+    },
+    {
+      "id": "HADSCH_HALLAS", "nameKo": "하드쉬 할라", "homePlanet": "VOLCANIC",
+      "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 1, "bowl1": 2, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": { "economy": 1 },
+      "baseIncome": { "credits": 3, "ore": 1, "knowledge": 1 },
+      "abilities": ["PI_FREE_CREDIT_CONVERT"]
+    },
+    {
+      "id": "IVITS", "nameKo": "하이브", "homePlanet": "VOLCANIC",
+      "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 1, "bowl1": 2, "bowl2": 2, "bowl3": 0, "vp": 10 },
+      "startTracks": {},
+      "piIncome": { "powerCharge": 4, "powerToken": 1, "qic": 1 },
+      "setup": { "placePiInsteadOfMines": true, "placeLast": true },
+      "abilities": ["SINGLE_FEDERATION_CUMULATIVE", "SATELLITE_COST_QIC", "PI_ACTION_SPACE_STATION"]
+    },
+    {
+      "id": "GEODENS", "nameKo": "기오덴", "homePlanet": "OXIDE",
+      "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 1, "bowl1": 2, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": { "terraforming": 1 },
+      "abilities": ["PI_NEW_PLANET_TYPE_KNOWLEDGE_3"]
+    },
+    {
+      "id": "BAL_TAKS", "nameKo": "발타크", "homePlanet": "OXIDE",
+      "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 0, "bowl1": 2, "bowl2": 2, "bowl3": 0, "vp": 10 },
+      "startTracks": { "gaiaforming": 1 },
+      "abilities": ["NAVIGATION_LOCKED_UNTIL_PI", "FREE_GAIAFORMER_TO_QIC", "QIC_ACADEMY_CREDITS_4"],
+      "fleetEntryVp": 7
+    },
+    {
+      "id": "LANTIDS", "nameKo": "란티다", "homePlanet": "TERRA",
+      "start": { "credits": 13, "ore": 4, "knowledge": 3, "qic": 1, "bowl1": 4, "bowl2": 0, "bowl3": 0, "vp": 10 },
+      "startTracks": {},
+      "baseIncome": { "ore": 1, "knowledge": 1, "powerToken": 1 },
+      "piIncome": { "powerCharge": 4 },
+      "abilities": ["PARASITE_MINE", "PI_PARASITE_MINE_KNOWLEDGE_2"]
+    },
+    {
+      "id": "TERRANS", "nameKo": "테란", "homePlanet": "TERRA",
+      "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 1, "bowl1": 4, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": { "gaiaforming": 1 },
+      "abilities": ["GAIA_POWER_RETURN_BOWL2", "PI_GAIA_TOKEN_CONVERT"]
+    },
+    {
+      "id": "FIRAKS", "nameKo": "파이락", "homePlanet": "TITANIUM",
+      "start": { "credits": 15, "ore": 3, "knowledge": 2, "qic": 1, "bowl1": 2, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": {},
+      "baseIncome": { "ore": 1, "knowledge": 2 },
+      "abilities": ["PI_ACTION_FREE_LAB_TO_TS_UPGRADE"]
+    },
+    {
+      "id": "BESCODS", "nameKo": "매드안드로이드", "homePlanet": "TITANIUM",
+      "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 1, "bowl1": 2, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": {},
+      "baseIncome": { "ore": 1 },
+      "piIncome": { "powerCharge": 4, "powerToken": 2 },
+      "abilities": ["SWAP_TS_LAB_INCOME", "ACTION_ADVANCE_LOWEST_TRACK", "PI_TITANIUM_POWER_PLUS_1"]
+    },
+    {
+      "id": "NEVLAS", "nameKo": "네블라", "homePlanet": "ICE",
+      "start": { "credits": 15, "ore": 4, "knowledge": 2, "qic": 1, "bowl1": 2, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": { "science": 1 },
+      "abilities": ["FREE_POWER3_TO_GAIA_KNOWLEDGE_1", "LAB_INCOME_POWERCHARGE_2", "PI_BOWL3_DOUBLE_VALUE", "FLEET_ENTRY_BURN_TOKEN"]
+    },
+    {
+      "id": "ITARS", "nameKo": "아이타", "homePlanet": "ICE",
+      "start": { "credits": 15, "ore": 5, "knowledge": 3, "qic": 1, "bowl1": 4, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": {},
+      "baseIncome": { "ore": 1, "knowledge": 1, "powerToken": 1 },
+      "abilities": ["BURN_TO_GAIA", "KNOWLEDGE_ACADEMY_INCOME_3", "PI_GAIA_4_TO_TECH_TILE", "FLEET_ENTRY_BURN_TOKEN", "LEECH_1_MANUAL"]
+    },
+    {
+      "id": "SPACE_GIANTS", "nameKo": "스페이스 자이언트", "homePlanet": "TRANSCENDENT",
+      "start": { "credits": 15, "ore": 6, "knowledge": 3, "qic": 1, "bowl1": 4, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": { "navigation": 1 },
+      "piIncome": { "powerCharge": 6, "powerToken": 1 },
+      "setup": { "initialMines": 1 },
+      "abilities": ["TERRAFORM_FIXED_2", "ACTION_TERRAFORM_2_PLACE_MINE", "PI_BUILD_GAIN_TECH_TILE"],
+      "expansion": true
+    },
+    {
+      "id": "MOWEIDS", "nameKo": "모웨이드", "homePlanet": "TRANSCENDENT",
+      "start": { "credits": 15, "ore": 6, "knowledge": 5, "qic": 2, "bowl1": 4, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": { "gaiaforming": 1 },
+      "setup": { "initialMines": 1, "startFleet": "TF_MARS" },
+      "abilities": ["TERRAFORM_HOME_3_OTHERS_1", "GAIA_COST_QIC_1", "PI_ACTION_ATTACH_RING"],
+      "expansion": true
+    },
+    {
+      "id": "TINKEROIDS", "nameKo": "팅커로이드", "homePlanet": "ASTEROIDS",
+      "start": { "credits": 15, "ore": 4, "knowledge": 2, "qic": 1, "bowl1": 4, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "startTracks": { "science": 1 },
+      "setup": { "placePiInsteadOfMines": true },
+      "abilities": ["TERRAFORM_HOME_3_OTHERS_1", "PI_PERSONAL_ACTION_TILES"],
+      "expansion": true
+    },
+    {
+      "id": "DAKANIANS", "nameKo": "다카니안", "homePlanet": "ASTEROIDS",
+      "start": { "credits": 15, "ore": 7, "knowledge": 3, "qic": 1, "bowl1": 4, "bowl2": 2, "bowl3": 0, "vp": 10 },
+      "startTracks": { "navigation": 1, "economy": 1 },
+      "setup": { "initialMines": 1 },
+      "abilities": ["TERRAFORM_FIXED_1", "PI_NEW_SECTOR_MINE_BONUS"],
+      "expansion": true
+    }
+  ]
+}

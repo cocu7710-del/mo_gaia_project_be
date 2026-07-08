@@ -1,0 +1,69 @@
+{
+  "_doc": "연구 트랙 + 기술 타일 (docs/data/tech.md 확정본). levels[i] = 레벨 i+1 도달 보상. 공통: 전진 비용 지식 4, 2→3 진입 시 파워 3 순환, 4→5는 5단계 미점유 + 연방 토큰 1 플립.",
+  "advanceCost": { "knowledge": 4 },
+  "level3EntryPowerCharge": 3,
+  "shovelOreCostByLevel": [3, 3, 2, 1, 1, 1],
+  "navRangeByLevel": [1, 1, 2, 2, 3, 4],
+  "gaiaformCostByLevel": [0, 6, 6, 4, 3, 3],
+  "tracks": {
+    "TERRA_FORMING": { "levels": [ { "gain": { "ore": 2 } }, { "passive": "SHOVEL_COST_2" }, { "passive": "SHOVEL_COST_1" }, { "gain": { "ore": 2 } }, { "special": "GAIN_TRACK_TOP_FEDERATION_TILE" } ] },
+    "NAVIGATION":    { "levels": [ { "gain": { "qic": 1 } }, { "passive": "RANGE_2" }, { "gain": { "qic": 1 } }, { "passive": "RANGE_3" }, { "passive": "RANGE_4", "special": "PLACE_BLACK_PLANET" } ] },
+    "AI":            { "levels": [ { "gain": { "qic": 1 } }, { "gain": { "qic": 1 } }, { "gain": { "qic": 2 } }, { "gain": { "qic": 2 } }, { "gain": { "qic": 4 } } ] },
+    "GAIA_FORMING":  { "levels": [ { "gain": { "gaiaformer": 1 } }, { "gain": { "powerTokens": 3 } }, { "gain": { "gaiaformer": 1 } }, { "gain": { "gaiaformer": 1 } }, { "special": "VP_4_PLUS_1_PER_GAIA_PLANET" } ] },
+    "ECONOMY": {
+      "incomeTrack": true,
+      "optionVariants": true,
+      "incomeByLevel": {
+        "1": { "credits": 2, "powerCharge": 1 },
+        "2": { "credits": 2, "ore": 1, "powerCharge": 2 },
+        "3": { "A": { "credits": 3, "ore": 1, "vp": 1 }, "B": { "credits": 2, "ore": 1, "powerCharge": 3 } },
+        "4": { "A": { "credits": 4, "ore": 2, "vp": 1 }, "B": { "credits": 2, "ore": 2, "powerCharge": 2 } }
+      },
+      "level5Gain": { "credits": 6, "ore": 3, "powerCharge": 6 }
+    },
+    "SCIENCE": {
+      "incomeTrack": true,
+      "incomeByLevel": { "1": { "knowledge": 1 }, "2": { "knowledge": 2 }, "3": { "knowledge": 3 }, "4": { "knowledge": 4 } },
+      "level5Gain": { "knowledge": 9 }
+    }
+  },
+  "basicTiles": [
+    { "id": "BASIC_TILE_1", "type": "ACTION",    "effect": { "powerCharge": 4 } },
+    { "id": "BASIC_TILE_2", "type": "INCOME",    "income": { "ore": 1, "powerCharge": 1 } },
+    { "id": "BASIC_TILE_3", "type": "INCOME",    "income": { "credits": 4 } },
+    { "id": "BASIC_TILE_4", "type": "INCOME",    "income": { "knowledge": 1, "credits": 1 } },
+    { "id": "BASIC_TILE_5", "type": "IMMEDIATE", "gain": { "qic": 1, "ore": 1 } },
+    { "id": "BASIC_TILE_6", "type": "IMMEDIATE", "gain": { "vp": 7 } },
+    { "id": "BASIC_TILE_7", "type": "IMMEDIATE", "special": "KNOWLEDGE_1_PER_PLANET_TYPE" },
+    { "id": "BASIC_TILE_8", "type": "PASSIVE",   "special": "GAIA_MINE_BUILD_VP_3" },
+    { "id": "BASIC_TILE_9", "type": "PASSIVE",   "special": "PI_ACADEMY_POWER_VALUE_PLUS_1" },
+    { "id": "BASIC_EXP_TILE_1", "type": "PASSIVE",   "special": "RANGE_PLUS_1", "expansion": true },
+    { "id": "BASIC_EXP_TILE_2", "type": "IMMEDIATE", "gain": { "ore": 1, "knowledge": 3 }, "expansion": true },
+    { "id": "BASIC_EXP_TILE_3", "type": "IMMEDIATE", "special": "TERRAFORM_2_PLACE_MINE", "expansion": true }
+  ],
+  "advancedTiles": [
+    { "id": "ADV_TILE_1",  "type": "IMMEDIATE", "special": "VP_2_PER_BUILDING_IN_SECTORS" },
+    { "id": "ADV_TILE_2",  "type": "IMMEDIATE", "special": "ORE_1_PER_BUILDING_IN_SECTORS" },
+    { "id": "ADV_TILE_3",  "type": "IMMEDIATE", "special": "VP_2_PER_MINE" },
+    { "id": "ADV_TILE_4",  "type": "IMMEDIATE", "special": "VP_4_PER_TRADING_STATION" },
+    { "id": "ADV_TILE_5",  "type": "IMMEDIATE", "special": "VP_5_PER_FEDERATION_TOKEN" },
+    { "id": "ADV_TILE_6",  "type": "IMMEDIATE", "special": "VP_2_PER_GAIA_PLANET" },
+    { "id": "ADV_TILE_7",  "type": "ACTION",    "effect": { "ore": 3 } },
+    { "id": "ADV_TILE_8",  "type": "ACTION",    "effect": { "knowledge": 3 } },
+    { "id": "ADV_TILE_9",  "type": "ACTION",    "effect": { "qic": 1, "credits": 5 } },
+    { "id": "ADV_TILE_10", "type": "PASSIVE",   "special": "VP_2_PER_TERRAFORM_STEP" },
+    { "id": "ADV_TILE_11", "type": "PASSIVE",   "special": "PASS_VP_2_PER_DEEP_SECTOR", "expansion": true },
+    { "id": "ADV_TILE_12", "type": "PASSIVE",   "special": "PASS_VP_2_PER_ASTEROID_AREA", "expansion": true },
+    { "id": "ADV_TILE_13", "type": "PASSIVE",   "special": "PASS_VP_3_PER_FEDERATION_TOKEN" },
+    { "id": "ADV_TILE_14", "type": "PASSIVE",   "special": "PASS_VP_3_PER_RESEARCH_LAB" },
+    { "id": "ADV_TILE_15", "type": "PASSIVE",   "special": "PASS_VP_1_PER_PLANET_TYPE" },
+    { "id": "ADV_TILE_16", "type": "PASSIVE",   "special": "VP_3_PER_MINE_BUILD" },
+    { "id": "ADV_TILE_17", "type": "PASSIVE",   "special": "VP_3_PER_TS_BUILD" },
+    { "id": "ADV_TILE_18", "type": "PASSIVE",   "special": "VP_2_PER_RESEARCH_ADVANCE" },
+    { "id": "ADV_TILE_19", "type": "IMMEDIATE", "special": "VP_6_PER_BIG_BUILDING", "expansion": true },
+    { "id": "ADV_TILE_20", "type": "IMMEDIATE", "special": "VP_4_PER_DEEP_SECTOR_WITH_BUILDING", "expansion": true },
+    { "id": "ADV_TILE_21", "type": "PASSIVE",   "special": "VP_4_PER_QIC_ACTION", "expansion": true }
+  ],
+  "advancedTileSetup": { "drawCount": 7, "commonSlotConditions": ["VP_25", "FLEET_3"] },
+  "basicTileSetup": { "trackSlots": 6, "commonSlots": 3, "expansionSlots": 3 }
+}
