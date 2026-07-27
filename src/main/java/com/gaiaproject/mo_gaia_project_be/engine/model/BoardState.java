@@ -23,8 +23,10 @@ public class BoardState {
     private Map<String, Integer> federationSupply = new LinkedHashMap<>();
     /** 테라포밍 트랙 꼭대기 타일 */
     private String terraformTrackFedTile;
-    /** 잊혀진 함대 위치(1~4) → 확장 연방 타일 id */
+    /** 잊혀진 함대(우주선 id) → 확장 연방 타일 id — 입장자가 연방 결성 시 선택 가능, 선택되면 소진 */
     private Map<String, String> fleetFedTiles = new LinkedHashMap<>();
+    /** 확장 기술 타일 슬롯(EXPANSION_1~3) → 연결된 함대(우주선 id) — 그 함대 입장자만 획득 가능 */
+    private Map<String, String> expansionTechShips = new LinkedHashMap<>();
     /** 부스터 id → 보유 중인 player id (null=공급처) */
     private Map<String, String> boosterHolders = new LinkedHashMap<>();
     private List<String> powerActionsUsedThisRound = new ArrayList<>();
@@ -47,6 +49,12 @@ public class BoardState {
     /** 현재 최고 비딩 플레이어 (경매 시작 시 null) */
     private String bidLeader;
     private int bidAmount;
-    /** 선택 가능한 종족 풀 */
+    /** 비딩 후보 종족 (인원수만큼 랜덤 드로우, 낙찰 시 제거) */
     private List<String> factionPool = new ArrayList<>();
+    /** 비딩 모드 b: 낙찰자가 턴 순번을 직접 선택 (false = 모드 a: 종족에 턴 슬롯이 사전 고정) */
+    private boolean bidTurnPick;
+    /** 모드 a: 슬롯 고정 목록 — index+1 = 턴 (예: [발타크, 하이브, 제노스, 팅커로이드] = 1~4턴). 모드 b에선 비움 */
+    private List<String> bidSlotFactions = new ArrayList<>();
+    /** 턴 슬롯("1"~"4") → 배정된 플레이어 (모드 a: 종족 고정 슬롯, 모드 b: 낙찰자 선택) */
+    private Map<String, String> bidTurnSlots = new LinkedHashMap<>();
 }

@@ -152,6 +152,7 @@ class GameFactionDepthTest {
             hex.setBuildingOwner("p3");
             hex.setBuildingType(types2[i]);
         }
+        state.setTurnEndPending(false); // 자유 행동 구간 종료 처리 (테스트 편의)
         state.setActivePlayer("p3");
         int qicBefore = p3.getQic();
         engine.apply(state, new GameEngine.Submit("p3", "ACTION_FORM_FEDERATION", null,
@@ -238,7 +239,7 @@ class GameFactionDepthTest {
 
         // 하이브 건물(의회)에서 도달 가능한 빈 우주 찾기
         String emptyKey = findHex(state, h -> "EMPTY".equals(h.getPlanet()) && !h.hasBuilding()
-                && h.getSatelliteOwner() == null && h.getShip() == null);
+                && h.getSatelliteOwners().isEmpty() && h.getShip() == null);
         HexCoord target = HexCoord.parse(emptyKey);
         int qic = EngineTestSupport.qicForRange(state, "p3", target, 1);
 
@@ -279,8 +280,11 @@ class GameFactionDepthTest {
                 case "INCOME_POWER_ORDER" -> engine.apply(state, new GameEngine.Submit(
                         top.getTarget(), "INCOME_POWER_ORDER", top.getId(), Map.of("order", "TOKENS_FIRST")));
                 case "ITARS_GAIA_TECH" -> {
+                    int bowl1Before = p4.getBowl1();
                     engine.apply(state, new GameEngine.Submit("p4", "ITARS_GAIA_TECH", top.getId(),
                             Map.of("sacrificeCount", 1)));
+                    // 잔여분(5-4=1)은 타일 선택 전에 bowl1 복귀 → 타일 획득 차징에 사용 가능
+                    assertEquals(bowl1Before + 1, p4.getBowl1());
                     sacrificed = true;
                 }
                 case "CHOOSE_TECH_TILE" -> {

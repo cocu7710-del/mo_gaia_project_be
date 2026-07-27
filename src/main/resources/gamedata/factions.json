@@ -5,7 +5,7 @@
       "id": "XENOS", "nameKo": "제노스", "homePlanet": "DESERT",
       "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 1, "bowl1": 2, "bowl2": 4, "bowl3": 0, "vp": 10 },
       "startTracks": { "ai": 1 },
-      "piIncome": { "powerCharge": 4, "powerToken": 1, "qic": 1 },
+      "piIncome": { "powerCharge": 4, "qic": 1 },
       "setup": { "initialMines": 3 },
       "abilities": ["FREE_ORE_TO_POWER3", "PI_FEDERATION_POWER_6"]
     },
@@ -13,7 +13,7 @@
       "id": "GLEENS", "nameKo": "글린", "homePlanet": "DESERT",
       "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 0, "bowl1": 2, "bowl2": 4, "bowl3": 0, "vp": 10 },
       "startTracks": { "navigation": 1 },
-      "piIncome": { "powerCharge": 4, "powerToken": 1, "ore": 1 },
+      "piIncome": { "powerCharge": 4, "ore": 1 },
       "abilities": ["QIC_TO_ORE_UNTIL_QIC_ACADEMY", "GAIA_PLANET_VP_2", "GAIA_COST_ORE_INSTEAD_QIC", "PI_GLEENS_FED_TOKEN", "ACTION_JUMP_RANGE_2"]
     },
     {
@@ -80,12 +80,12 @@
       "abilities": ["PI_ACTION_FREE_LAB_TO_TS_UPGRADE"]
     },
     {
-      "id": "BESCODS", "nameKo": "매드안드로이드", "homePlanet": "TITANIUM",
+      "id": "BESCODS", "nameKo": "매드 안드로이드", "homePlanet": "TITANIUM",
       "start": { "credits": 15, "ore": 4, "knowledge": 3, "qic": 1, "bowl1": 2, "bowl2": 4, "bowl3": 0, "vp": 10 },
       "startTracks": {},
       "baseIncome": { "ore": 1 },
       "piIncome": { "powerCharge": 4, "powerToken": 2 },
-      "abilities": ["SWAP_TS_LAB_INCOME", "ACTION_ADVANCE_LOWEST_TRACK", "PI_TITANIUM_POWER_PLUS_1"]
+      "abilities": ["SWAP_TS_LAB_INCOME", "SWAP_UPGRADE_PATHS", "ACTION_ADVANCE_LOWEST_TRACK", "PI_TITANIUM_POWER_PLUS_1"]
     },
     {
       "id": "NEVLAS", "nameKo": "네블라", "homePlanet": "ICE",

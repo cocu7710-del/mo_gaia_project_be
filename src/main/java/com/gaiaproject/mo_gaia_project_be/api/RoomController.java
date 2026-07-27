@@ -10,6 +10,7 @@ import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,9 +28,14 @@ import java.util.UUID;
 public class RoomController {
 
     public record CreateRoomRequest(@NotBlank @Size(max = 50) String name,
-                                    Boolean bidding, String undoPolicy, Integer leechTimerSeconds) {}
+                                    Boolean bidding, String undoPolicy, Integer leechTimerSeconds,
+                                    String bidMode, Boolean localMode) {}
 
     public record FactionRequest(@NotBlank String faction) {}
+
+    public record ReadyRequest(boolean ready) {}
+
+    public record KickRequest(UUID userId) {}
 
     private final RoomService rooms;
     private final UserRepository users;
@@ -43,12 +49,37 @@ public class RoomController {
     public RoomService.RoomView create(@Valid @RequestBody CreateRoomRequest request, Authentication auth) {
         return rooms.createRoom(currentUserId(auth), request.name(),
                 new GameService.GameOptions(Boolean.TRUE.equals(request.bidding()), request.undoPolicy(),
-                        request.leechTimerSeconds()));
+                        request.leechTimerSeconds(), request.bidMode(), Boolean.TRUE.equals(request.localMode())));
     }
 
     @GetMapping
     public List<RoomService.RoomView> list() {
         return rooms.listWaiting();
+    }
+
+    /** 로비 진행중 탭 — 내가 참가 중인 진행 게임 */
+    @GetMapping("/ongoing")
+    public List<RoomService.RoomView> ongoing(Authentication auth) {
+        return rooms.listMyOngoing(currentUserId(auth));
+    }
+
+    @PostMapping("/{roomId}/ready")
+    public RoomService.RoomView ready(@PathVariable UUID roomId,
+                                      @RequestBody ReadyRequest request, Authentication auth) {
+        return rooms.setReady(roomId, currentUserId(auth), request.ready());
+    }
+
+    /** 관전 탭 — 내가 참가하지 않은 진행 게임 */
+    @GetMapping("/spectate")
+    public List<RoomService.RoomView> spectate(Authentication auth) {
+        return rooms.listSpectatable(currentUserId(auth));
+    }
+
+    /** 방장 전용 — 시작 전 멤버 강퇴 */
+    @PostMapping("/{roomId}/kick")
+    public RoomService.RoomView kick(@PathVariable UUID roomId,
+                                     @RequestBody KickRequest request, Authentication auth) {
+        return rooms.kick(roomId, currentUserId(auth), request.userId());
     }
 
     @GetMapping("/{roomId}")
@@ -64,6 +95,13 @@ public class RoomController {
     @PostMapping("/{roomId}/leave")
     public Map<String, String> leave(@PathVariable UUID roomId, Authentication auth) {
         rooms.leave(roomId, currentUserId(auth));
+        return Map.of("status", "ok");
+    }
+
+    /** 방장 전용 — 시작 전 방 삭제 */
+    @DeleteMapping("/{roomId}")
+    public Map<String, String> delete(@PathVariable UUID roomId, Authentication auth) {
+        rooms.deleteRoom(roomId, currentUserId(auth));
         return Map.of("status", "ok");
     }
 

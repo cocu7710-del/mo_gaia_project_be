@@ -127,6 +127,11 @@ class GameEngineTest {
                     Map.of("accept", true)));
         }
         assertTrue(state.player("p2").getVp() < p2VpBefore);  // VP 비용 지불
+        assertEquals("p1", state.getActivePlayer());          // 아직 p1의 자유 행동 구간 (§7.10)
+        assertTrue(state.isTurnEndPending());
+
+        // 명시적 턴 종료 → p2로 전환
+        EngineTestSupport.endTurn(engine, state);
         assertEquals("p2", state.getActivePlayer());
     }
 

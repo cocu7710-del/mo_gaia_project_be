@@ -5,6 +5,7 @@ import com.gaiaproject.mo_gaia_project_be.infra.jpa.GamePendingDecisionEntity;
 import com.gaiaproject.mo_gaia_project_be.infra.repo.GamePendingDecisionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +15,7 @@ import java.util.Map;
 
 /** ③ 리치 응답 타이머 — 마감 초과 오퍼를 자동 거절한다 (방 옵션 leechTimerSeconds가 켜진 게임만 마감이 존재). */
 @Component
+@ConditionalOnProperty(name = "gaia.leech-sweeper.enabled", havingValue = "true", matchIfMissing = true)
 public class LeechTimeoutJob {
 
     private static final Logger log = LoggerFactory.getLogger(LeechTimeoutJob.class);

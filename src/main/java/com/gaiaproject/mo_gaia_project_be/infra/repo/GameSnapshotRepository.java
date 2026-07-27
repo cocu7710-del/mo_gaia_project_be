@@ -14,4 +14,6 @@ public interface GameSnapshotRepository extends JpaRepository<GameSnapshotEntity
 
     /** 턴 경계가 아닌 임시 스냅샷 정리 (체크포인트만 유지) */
     void deleteByGameIdAndSnapshotType(UUID gameId, String snapshotType);
+
+    void deleteByGameId(UUID gameId);
 }

@@ -31,6 +31,11 @@ public class GameEngine {
             "MINE", List.of("TRADING_STATION"),
             "TRADING_STATION", List.of("RESEARCH_LAB", "PLANETARY_INSTITUTE"),
             "RESEARCH_LAB", List.of("ACADEMY"));
+    /** 매드 안드로이드: 교역소 → 연구소/아카데미, 연구소 → 의회 (스왑) */
+    private static final Map<String, List<String>> BESCODS_UPGRADE_PATHS = Map.of(
+            "MINE", List.of("TRADING_STATION"),
+            "TRADING_STATION", List.of("RESEARCH_LAB", "ACADEMY"),
+            "RESEARCH_LAB", List.of("PLANETARY_INSTITUTE"));
 
     private final GameData data;
 
@@ -56,6 +61,7 @@ public class GameEngine {
             case "ACTION_FREE" -> applyFreeAction(state, submit);
             case "ACTION_SPECIAL" -> applySpecialAction(state, submit);
             case "ACTION_PASS" -> applyPass(state, submit);
+            case "END_TURN" -> applyEndTurn(state, submit);
             case "CHOOSE_TECH_TILE" -> applyChooseTechTile(state, submit);
             case "CHOOSE_FEDERATION_TILE" -> applyChooseFederationTile(state, submit);
             case "PLACE_MINE" -> applyFreeMine(state, submit);
@@ -69,23 +75,18 @@ public class GameEngine {
             case "TINKEROIDS_ACTION_PICK" -> applyTinkeroidsPick(state, submit);
             default -> throw new EngineException("지원하지 않는 입력 타입: " + submit.type());
         };
-        // 메인 액션의 연쇄가 모두 해소되면 턴 종료
-        if ("PLAYING".equals(state.getPhase()) && state.getDecisionStack().isEmpty() && state.isTurnEndPending()) {
-            state.setTurnEndPending(false);
-            advanceTurn(state);
-        }
-        // 라운드 종료 대기(아이타 가이아 페이즈) 해소 완료 → 라운드 마감 재개
-        if ("PLAYING".equals(state.getPhase()) && state.getDecisionStack().isEmpty() && state.isRoundEndPending()) {
-            state.setRoundEndPending(false);
-            finishRound(state);
-        }
+        // 메인 액션 연쇄가 해소돼도 자동으로 턴을 넘기지 않는다 — 자유 행동 구간 유지,
+        // END_TURN 제출로만 전환 (game-spec §7.10). 패스는 applyPass에서 즉시 전환.
         state.setVersion(state.getVersion() + events.size());
         return events;
     }
 
     // ═══════════════ 종족 비딩 (SETUP_BID, decision-flows §4) ═══════════════
 
-    /** 순차 경매: 돌아가며 값을 올리거나 패스 — 혼자 남으면 낙찰 → 종족 선택. 첫 발언자는 패스 불가(0 이상). */
+    /**
+     * 순차 경매: 돌아가며 값을 올리거나 패스 — 혼자 남으면 낙찰 → 종족 선택.
+     * 누구든(첫 발언자 포함) 패스 가능, 최소 제시가 1. 전원 패스하면 마지막 잔류자가 비딩 0으로 낙찰.
+     */
     private List<EngineEvent> applyBidFaction(GameState state, Submit submit) {
         Decision top = requireTopDecision(state, submit, "BID_FACTION");
         List<String> active = state.getBoard().getBidActive();
@@ -93,13 +94,10 @@ public class GameEngine {
         int speakerIdx = active.indexOf(submit.playerId());
 
         if (pass) {
-            if (state.getBoard().getBidLeader() == null) {
-                throw new EngineException("첫 발언자는 패스할 수 없습니다 (0 이상 비딩)");
-            }
             active.remove(speakerIdx);
         } else {
             int bid = intOf(submit.payload(), "bid");
-            int min = state.getBoard().getBidLeader() == null ? 0 : state.getBoard().getBidAmount() + 1;
+            int min = state.getBoard().getBidLeader() == null ? 1 : state.getBoard().getBidAmount() + 1;
             if (bid < min) {
                 throw new EngineException("비딩값은 " + min + " 이상이어야 합니다");
             }
@@ -141,17 +139,35 @@ public class GameEngine {
         return Map.of("id", d.getId(), "type", d.getType(), "target", winner);
     }
 
-    /** 낙찰자 종족 선택 — 종족+턴 순서 고정, 비딩값은 최종 점수 차감. 전원 배정 시 초기 배치 시작. */
+    /**
+     * 낙찰자 종족 선택 — 비딩값은 최종 점수 차감. 전원 배정 시 초기 배치 시작.
+     * 모드 a: 종족에 사전 고정된 턴 슬롯(bidSlotFactions의 순번)을 함께 가져간다.
+     * 모드 b(bidTurnPick): 페이로드 turnSlot(1~4)로 원하는 턴 순번 선택.
+     */
     private List<EngineEvent> applyChooseFaction(GameState state, Submit submit) {
         Decision top = requireTopDecision(state, submit, "CHOOSE_FACTION");
         String factionId = (String) submit.payload().get("faction");
         if (!state.getBoard().getFactionPool().contains(factionId)) {
             throw new EngineException("선택할 수 없는 종족입니다: " + factionId);
         }
+        boolean turnPick = state.getBoard().isBidTurnPick();
+        int seatNo;
+        if (turnPick) {
+            int slot = intOf(submit.payload(), "turnSlot");
+            if (slot < 1 || slot > 4) {
+                throw new EngineException("턴 순번(turnSlot)을 1~4로 지정해야 합니다");
+            }
+            if (state.getBoard().getBidTurnSlots().containsKey(String.valueOf(slot))) {
+                throw new EngineException("이미 선택된 턴 순번입니다: " + slot);
+            }
+            seatNo = slot;
+        } else {
+            seatNo = state.getBoard().getBidSlotFactions().indexOf(factionId) + 1; // 종족↔턴 사전 고정
+        }
+        state.getBoard().getBidTurnSlots().put(String.valueOf(seatNo), submit.playerId());
         GameSetup.initPlayer(data, state, submit.playerId(), factionId);
         PlayerState p = state.player(submit.playerId());
         p.setBidVp((int) top.getContext().get("bid"));
-        state.getTurnOrder().add(submit.playerId());
         state.getBoard().getFactionPool().remove(factionId);
         state.getBoard().getBidUnassigned().remove(submit.playerId());
         state.getDecisionStack().remove(top);
@@ -160,6 +176,10 @@ public class GameEngine {
         List<String> remaining = state.getBoard().getBidUnassigned();
         state.getBoard().getBidActive().clear();
         if (remaining.isEmpty()) {
+            // 슬롯 1~4 순서로 턴 순서 확정 (모드 a·b 공통)
+            for (int slot = 1; slot <= 4; slot++) {
+                state.getTurnOrder().add(state.getBoard().getBidTurnSlots().get(String.valueOf(slot)));
+            }
             GameSetup.startPlacementPhase(data, state);
         } else if (remaining.size() == 1) {
             // 마지막 플레이어는 경매 없이 비딩 0으로 선택
@@ -174,7 +194,7 @@ public class GameEngine {
             pushed.add(pushBidDecision(state, remaining.get(0)));
         }
         return List.of(event("FACTION_ASSIGNED", submit,
-                Map.of("faction", factionId, "bidVp", p.getBidVp(), "seatNo", state.getTurnOrder().size()),
+                Map.of("faction", factionId, "bidVp", p.getBidVp(), "seatNo", seatNo),
                 pushed));
     }
 
@@ -215,7 +235,8 @@ public class GameEngine {
         if (state.getDecisionStack().isEmpty() && "SETUP_BOOSTER".equals(state.getPhase())) {
             state.setPhase("PLAYING");
             state.setRound(1);
-            pushTinkeroidsPicks(state); // 1라운드 액션 타일 선택
+            incomePhase(state); // 1라운드도 수입 → (가이아 없음) → 종족 능력 순서
+            pushAbilityPhase(state);
             state.setActivePlayer(state.getTurnOrder().get(0));
         } else if (!state.getDecisionStack().isEmpty()) {
             state.setActivePlayer(state.topDecision().getTarget());
@@ -285,12 +306,15 @@ public class GameEngine {
             int parasiteCredits = freeBuild ? 0 : 2;
             int parasiteOre = freeBuild ? 0 : 1;
             requireResources(p, parasiteCredits, parasiteOre, qicForRange);
+            boolean newSector = !hasPresenceInSector(state, submit.playerId(), hex.getSectorId());
             p.setCredits(p.getCredits() - parasiteCredits);
             p.setOre(p.getOre() - parasiteOre);
             p.setQic(p.getQic() - qicForRange);
             decreaseStock(p, "MINE");
             hex.setParasiteOwner(submit.playerId());
             roundScore(state, p, "MINE_PLACED", 1);
+            techMineBuildVp(p, "GAIA".equals(planet));
+            newColonizationTriggers(state, submit.playerId(), newSector, false); // 기생은 행성 종류 미개척
             if (hasAbility(faction, "PI_PARASITE_MINE_KNOWLEDGE_2")
                     && builtCount(state, submit.playerId(), "PLANETARY_INSTITUTE") > 0) {
                 p.setKnowledge(p.getKnowledge() + 2);
@@ -307,9 +331,8 @@ public class GameEngine {
         if (planetOnly != null && !planetOnly.equals(planet)) {
             throw new EngineException(planetOnly + " 행성에만 건설할 수 있는 효과입니다");
         }
-        // 소행성: 홈이 아니면 가이아포머 1개 영구 소각으로 무료 건설 (factions.md 공통 룰)
-        boolean asteroidFormerBurn = planetOnly == null && "ASTEROIDS".equals(planet)
-                && !"ASTEROIDS".equals(faction.get("homePlanet").asText());
+        // 소행성: 전 종족 공통 — 가이아포머 1개 영구 소각으로 무료 건설 (확장 종족도 홈 개념 없음)
+        boolean asteroidFormerBurn = planetOnly == null && "ASTEROIDS".equals(planet);
         if (asteroidFormerBurn && p.stockOf("GAIAFORMER") < 1) {
             throw new EngineException("소행성 건설에는 소각할 가이아포머가 필요합니다");
         }
@@ -329,16 +352,20 @@ public class GameEngine {
             } else if (hasAbility(faction, "GAIA_COST_ORE_INSTEAD_QIC")) {
                 ore += 1;
             } else {
-                qic += 1;
+                // 기본 종족 QIC 1, 확장 종족 QIC 2 — 모웨이드(GAIA_COST_QIC_1)만 1 (I-4)
+                qic += faction.path("expansion").asBoolean(false)
+                        && !hasAbility(faction, "GAIA_COST_QIC_1") ? 2 : 1;
             }
         } else if ("ASTEROIDS".equals(planet)) {
             rawShovels = 0; // 소행성은 테라포밍 비용 없음 (가이아포머 소각 경로 또는 함대 액션)
         } else {
-            rawShovels = terraformShovels(state, faction, planet);
+            rawShovels = terraformShovels(p, faction, planet);
             int paidShovels = Math.max(0, rawShovels - freeShovels);
             ore += paidShovels * data.tech().get("shovelOreCostByLevel").get(p.track("TERRA_FORMING")).asInt();
         }
         requireResources(p, credits, ore, qic);
+        boolean newSector = !hasPresenceInSector(state, submit.playerId(), hex.getSectorId());
+        boolean newPlanetType = !colonizedPlanetTypes(state, submit.playerId()).contains(planet);
 
         p.setCredits(p.getCredits() - credits);
         p.setOre(p.getOre() - ore);
@@ -354,13 +381,18 @@ public class GameEngine {
         hex.setBuildingType("MINE");
 
         roundScore(state, p, "MINE_PLACED", 1);
+        techMineBuildVp(p, gaia);
+        newColonizationTriggers(state, submit.playerId(), newSector, newPlanetType);
         if (rawShovels > 0) {
             roundScore(state, p, "TERRAFORM_STEP", rawShovels);
+            if (hasActiveTile(p, "ADV_TILE_10")) {
+                gainVp(p, 2 * rawShovels, "TECH_ADV"); // 테라포밍 삽당 +2VP (고급⑩)
+            }
         }
         if (gaia) {
             roundScore(state, p, "GAIA_PLANET_COLONIZED", 1);
             if (hasAbility(faction, "GAIA_PLANET_VP_2")) {
-                p.setVp(p.getVp() + 2);
+                gainVp(p, 2, "FACTION");
             }
         }
         autoIncorporateIntoFederation(state, submit.playerId(), target);
@@ -380,7 +412,9 @@ public class GameEngine {
         if (!submit.playerId().equals(hex.getBuildingOwner())) {
             throw new EngineException("본인 건물이 아닙니다");
         }
-        List<String> allowed = UPGRADE_PATHS.get(hex.getBuildingType());
+        Map<String, List<String>> paths = hasAbility(faction, "SWAP_UPGRADE_PATHS")
+                ? BESCODS_UPGRADE_PATHS : UPGRADE_PATHS;
+        List<String> allowed = paths.get(hex.getBuildingType());
         if (allowed == null || !allowed.contains(to)) {
             throw new EngineException("업그레이드 불가: " + hex.getBuildingType() + " → " + to);
         }
@@ -399,16 +433,38 @@ public class GameEngine {
         Map<String, Object> before = resourceSnapshot(p);
         p.setCredits(p.getCredits() - credits);
         p.setOre(p.getOre() - ore);
+        List<Map<String, Object>> pushed = upgradeCore(state, submit, hex, target, to);
+
+        state.setTurnEndPending(true);
+        return List.of(event("ACTION_UPGRADED", submit,
+                Map.of("to", to,
+                        "resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), pushed));
+    }
+
+    /**
+     * 업그레이드 커밋 공통 (일반 업그레이드·파이락 PI·함대 업그레이드 합류점):
+     * 재고 교환 → 건물 교체 → 라운드 점수·타일 보너스 → 종족 PI 트리거 → 기술 타일·리치 push.
+     * 진입부(경로 검증·비용)만 호출부가 분기한다.
+     */
+    private List<Map<String, Object>> upgradeCore(GameState state, Submit submit,
+                                                  HexState hex, HexCoord target, String to) {
+        PlayerState p = state.player(submit.playerId());
+        JsonNode faction = faction(state, submit.playerId());
+        if (p.stockOf(to) < 1) {
+            throw new EngineException("재고 없음: " + to);
+        }
         p.getStock().merge(hex.getBuildingType(), 1, Integer::sum); // 이전 건물 재고 반환
         decreaseStock(p, to);
         hex.setBuildingType(to);
         if ("ACADEMY".equals(to)) {
-            String academyType = (String) submit.payload().getOrDefault("academyType", "KNOWLEDGE");
-            hex.setAcademyType(academyType);
+            hex.setAcademyType((String) submit.payload().getOrDefault("academyType", "KNOWLEDGE"));
         }
 
         switch (to) {
-            case "TRADING_STATION" -> roundScore(state, p, "TRADING_STATION_BUILT", 1);
+            case "TRADING_STATION" -> {
+                roundScore(state, p, "TRADING_STATION_BUILT", 1);
+                techTsBuildVp(p);
+            }
             case "RESEARCH_LAB" -> roundScore(state, p, "RESEARCH_LAB_BUILT", 1);
             case "PLANETARY_INSTITUTE", "ACADEMY" -> roundScore(state, p, "ACADEMY_OR_PI_BUILT", 1);
             default -> { }
@@ -424,17 +480,10 @@ public class GameEngine {
         boolean gainsTechTile = "RESEARCH_LAB".equals(to) || "ACADEMY".equals(to)
                 || ("PLANETARY_INSTITUTE".equals(to) && hasAbility(faction, "PI_BUILD_GAIN_TECH_TILE"));
         if (gainsTechTile) {
-            Decision techDecision = new Decision(state.newDecisionId(), "CHOOSE_TECH_TILE",
-                    submit.playerId(), Map.of("reason", to));
-            state.getDecisionStack().add(techDecision);
-            pushed.add(Map.of("id", techDecision.getId(), "type", "CHOOSE_TECH_TILE", "target", submit.playerId()));
+            pushed.add(pushDecision(state, "CHOOSE_TECH_TILE", submit.playerId(), Map.of("reason", to)));
         }
         pushed.addAll(pushLeechDecisions(state, submit.playerId(), target));
-
-        state.setTurnEndPending(true);
-        return List.of(event("ACTION_UPGRADED", submit,
-                Map.of("to", to,
-                        "resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), pushed));
+        return pushed;
     }
 
     // ═══════════════ 기술 타일 선택 ═══════════════
@@ -445,9 +494,6 @@ public class GameEngine {
         Map<String, Object> before = resourceSnapshot(p);
         String position = (String) submit.payload().get("position");
         boolean advanced = Boolean.TRUE.equals(submit.payload().get("advanced"));
-        if (advanced && Boolean.TRUE.equals(top.getContext().get("basicOnly"))) {
-            throw new EngineException("이 결정에서는 기본 타일만 선택할 수 있습니다");
-        }
         String chosenTrack = (String) submit.payload().get("techTrack");
 
         state.getDecisionStack().remove(top);
@@ -474,6 +520,11 @@ public class GameEngine {
         String tileId = state.getBoard().getTechOffers().get(position);
         if (tileId == null) {
             throw new EngineException("해당 위치에 기본 타일이 없습니다: " + position);
+        }
+        // 확장 슬롯: 연결된 함대에 입장한 플레이어만 획득 가능
+        String requiredShip = state.getBoard().getExpansionTechShips().get(position);
+        if (requiredShip != null && !p.getFleetProbes().contains(requiredShip)) {
+            throw new EngineException("해당 함대에 입장해야 획득할 수 있는 타일입니다: " + requiredShip);
         }
         if (p.getTechTiles().contains(tileId)) {
             throw new EngineException("이미 보유한 타일입니다: " + tileId);
@@ -525,7 +576,7 @@ public class GameEngine {
         }
         String playerId = submit.playerId();
         if (tile.has("gain")) {
-            gainResources(state, playerId, tile.get("gain"));
+            gainResources(state, playerId, tile.get("gain"), "TECH_BASIC");
         }
         switch (tile.path("special").asText("")) {
             case "KNOWLEDGE_1_PER_PLANET_TYPE" -> {
@@ -534,7 +585,7 @@ public class GameEngine {
             }
             case "TERRAFORM_2_PLACE_MINE" -> {
                 Decision d = new Decision(state.newDecisionId(), "PLACE_MINE", playerId,
-                        Map.of("freeShovels", 2, "freeBuild", false));
+                        Map.of("freeShovels", 2, "freeBuild", true)); // 광산 비용도 무료
                 state.getDecisionStack().add(d);
             }
             default -> { }
@@ -547,26 +598,29 @@ public class GameEngine {
         }
         PlayerState p = state.player(playerId);
         switch (tile.path("special").asText("")) {
-            case "VP_2_PER_MINE" -> p.setVp(p.getVp() + 2 * builtCount(state, playerId, "MINE"));
-            case "VP_4_PER_TRADING_STATION" -> p.setVp(p.getVp() + 4 * builtCount(state, playerId, "TRADING_STATION"));
-            case "VP_5_PER_FEDERATION_TOKEN" -> p.setVp(p.getVp() + 5 * p.getFederationTokens().size());
-            case "VP_2_PER_GAIA_PLANET" -> p.setVp(p.getVp() + 2 * gaiaPlanetCount(state, playerId));
-            case "VP_2_PER_BUILDING_IN_SECTORS" -> p.setVp(p.getVp() + 2 * buildingsInBaseSectors(state, playerId));
+            case "VP_2_PER_MINE" -> gainVp(p, 2 * mineCountForScoring(state, playerId), "TECH_ADV");
+            case "VP_4_PER_TRADING_STATION" -> gainVp(p, 4 * builtCount(state, playerId, "TRADING_STATION"), "TECH_ADV");
+            case "VP_5_PER_FEDERATION_TOKEN" -> gainVp(p, 5 * p.getFederationTokens().size(), "TECH_ADV");
+            case "VP_2_PER_GAIA_PLANET" -> gainVp(p, 2 * gaiaPlanetCount(state, playerId), "TECH_ADV");
+            case "VP_2_PER_BUILDING_IN_SECTORS" -> gainVp(p, 2 * buildingsInBaseSectors(state, playerId), "TECH_ADV");
             case "ORE_1_PER_BUILDING_IN_SECTORS" -> p.setOre(p.getOre() + buildingsInBaseSectors(state, playerId));
             case "VP_6_PER_BIG_BUILDING" -> {
                 int big = builtCount(state, playerId, "PLANETARY_INSTITUTE") + builtCount(state, playerId, "ACADEMY");
-                p.setVp(p.getVp() + 6 * big);
+                gainVp(p, 6 * big, "TECH_ADV");
             }
-            case "VP_4_PER_DEEP_SECTOR_WITH_BUILDING" -> p.setVp(p.getVp() + 4 * deepSectorsWithBuilding(state, playerId));
+            case "VP_4_PER_DEEP_SECTOR_WITH_BUILDING" -> gainVp(p, 4 * deepSectorsWithBuilding(state, playerId), "TECH_ADV");
             default -> { }
         }
     }
 
     // ═══════════════ 트랙 전진 (타일 무료 전진 공용) ═══════════════
 
-    /** 무료 전진 — 5단계 점유/연방 토큰 부족 시 전진만 스킵 (타일은 이미 획득, edge-cases §3) */
+    /** 무료 전진 — 5단계 점유/연방 토큰 부족/발타크 항해 잠금 시 전진만 스킵 (타일은 이미 획득, edge-cases §3) */
     private void advanceTrackIfPossible(GameState state, String playerId, String track) {
         PlayerState p = state.player(playerId);
+        if (navigationLocked(state, playerId, track)) {
+            return; // 발타크: PI 건설 전 항해 전진 불가 (I-12)
+        }
         int level = p.track(track);
         if (level >= 5) {
             return;
@@ -584,6 +638,13 @@ public class GameEngine {
         applyTrackAdvance(state, playerId, track, level + 1);
     }
 
+    /** 발타크 항해 잠금 — PI 건설 전에는 유료·무료 어떤 경로로도 항해 트랙 전진 불가 (I-12) */
+    private boolean navigationLocked(GameState state, String playerId, String track) {
+        return "NAVIGATION".equals(track)
+                && hasAbility(data.faction(state.player(playerId).getFaction()), "NAVIGATION_LOCKED_UNTIL_PI")
+                && builtCount(state, playerId, "PLANETARY_INSTITUTE") == 0;
+    }
+
     private void applyTrackAdvance(GameState state, String playerId, String track, int newLevel) {
         PlayerState p = state.player(playerId);
         p.getTracks().put(track, newLevel);
@@ -595,7 +656,7 @@ public class GameEngine {
         if (levels != null) {
             JsonNode reward = levels.get(newLevel - 1);
             if (reward.has("gain")) {
-                gainResources(state, playerId, reward.get("gain"));
+                gainResources(state, playerId, reward.get("gain"), "TRACK");
             }
             switch (reward.path("special").asText("")) {
                 case "GAIN_TRACK_TOP_FEDERATION_TILE" -> {
@@ -608,13 +669,16 @@ public class GameEngine {
                 case "PLACE_BLACK_PLANET" -> state.getDecisionStack().add(
                         new Decision(state.newDecisionId(), "PLACE_BLACK_PLANET", playerId, Map.of()));
                 case "VP_4_PLUS_1_PER_GAIA_PLANET" ->
-                        p.setVp(p.getVp() + 4 + gaiaPlanetCount(state, playerId));
+                        gainVp(p, 4 + gaiaPlanetCount(state, playerId), "TRACK");
                 default -> { }
             }
         } else if (newLevel == 5 && trackNode.has("level5Gain")) {
-            gainResources(state, playerId, trackNode.get("level5Gain")); // 수입 소멸은 수입 슬라이스에서 반영
+            gainResources(state, playerId, trackNode.get("level5Gain"), "TRACK"); // 수입 소멸은 수입 슬라이스에서 반영
         }
         roundScore(state, p, "RESEARCH_ADVANCED", 1);
+        if (hasActiveTile(p, "ADV_TILE_18")) {
+            gainVp(p, 2, "TECH_ADV"); // 연구 전진마다 +2VP (고급⑱)
+        }
     }
 
     // ═══════════════ 연구 전진 / 파워 액션 / 가이아포밍 / 연방 / 패스 (메인 액션) ═══════════════
@@ -670,7 +734,7 @@ public class GameEngine {
                 Boolean.TRUE.equals(submit.payload().get("useBrainstone")),
                 nevlasPiDouble(state, submit.playerId()));
         if (action.has("gain")) {
-            gainResources(state, submit.playerId(), action.get("gain"));
+            gainResources(state, submit.playerId(), action.get("gain"), "POWER_ACTION");
         }
         List<Map<String, Object>> pushed = new ArrayList<>();
         switch (action.path("special").asText("")) {
@@ -744,8 +808,10 @@ public class GameEngine {
         }
         for (String key : satellites) {
             HexState h = state.getHexes().get(key);
-            if (h == null || !"EMPTY".equals(h.getPlanet()) || h.hasBuilding()
-                    || h.getSatelliteOwner() != null || h.getShip() != null) {
+            // 빈 우주(우주정거장 위 허용) — 다른 플레이어 위성과는 공존 가능, 내 위성 중복만 불가
+            if (h == null || !"EMPTY".equals(h.getPlanet()) || h.getShip() != null
+                    || (h.hasBuilding() && !"SPACE_STATION".equals(h.getBuildingType()))
+                    || h.getSatelliteOwners().contains(submit.playerId())) {
                 throw new EngineException("위성을 배치할 수 없는 헥스입니다: " + key);
             }
         }
@@ -813,7 +879,7 @@ public class GameEngine {
                     Boolean.TRUE.equals(submit.payload().get("removeBrainstone")));
         }
         for (String key : satellites) {
-            state.getHexes().get(key).setSatelliteOwner(submit.playerId());
+            state.getHexes().get(key).getSatelliteOwners().add(submit.playerId());
         }
         if (existingGroup != null) {
             existingGroup.put("buildings", allBuildings);
@@ -837,18 +903,31 @@ public class GameEngine {
                 List.of(Map.of("id", tileChoice.getId(), "type", "CHOOSE_FEDERATION_TILE", "target", submit.playerId()))));
     }
 
+    /** 결성 보상 선택지 = 공급처 + 내가 입장한 함대의 확장 연방 타일 (함대 타일은 1장 — 선택 시 소진) */
     private List<EngineEvent> applyChooseFederationTile(GameState state, Submit submit) {
         Decision top = requireTopDecision(state, submit, "CHOOSE_FEDERATION_TILE");
         String tileId = (String) submit.payload().get("tile");
         Map<String, Integer> supply = state.getBoard().getFederationSupply();
-        Integer count = supply.get(tileId);
-        if (count == null || count < 1) {
-            throw new EngineException("공급처에 없는 연방 타일입니다: " + tileId);
-        }
         PlayerState p = state.player(submit.playerId());
         Map<String, Object> before = resourceSnapshot(p);
 
-        supply.put(tileId, count - 1);
+        Integer count = supply.get(tileId);
+        if (count != null && count >= 1) {
+            supply.put(tileId, count - 1);
+        } else {
+            Map<String, String> fleetTiles = state.getBoard().getFleetFedTiles();
+            String ship = fleetTiles.entrySet().stream()
+                    .filter(e -> tileId.equals(e.getValue()))
+                    .map(Map.Entry::getKey)
+                    .findFirst().orElse(null);
+            if (ship == null) {
+                throw new EngineException("공급처에 없는 연방 타일입니다: " + tileId);
+            }
+            if (!p.getFleetProbes().contains(ship)) {
+                throw new EngineException("해당 함대에 입장해야 선택할 수 있는 타일입니다: " + ship);
+            }
+            fleetTiles.remove(ship);
+        }
         if (!p.getFederations().isEmpty()) {
             p.getFederations().get(p.getFederations().size() - 1).put("tile", tileId);
         }
@@ -882,31 +961,48 @@ public class GameEngine {
         p.setPassed(true);
         state.getBoard().getPassOrder().add(submit.playerId());
 
-        state.setTurnEndPending(true);
+        // 패스는 자유 행동 구간 없이 즉시 턴 전환 (game-spec §7.10)
+        advanceTurn(state);
         return List.of(event("ACTION_PASSED", submit,
                 Map.of("resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), List.of()));
+    }
+
+    /** 명시적 턴 종료 — 메인 액션 후 자유 행동 구간을 닫고 다음 플레이어로 (game-spec §7.10) */
+    private List<EngineEvent> applyEndTurn(GameState state, Submit submit) {
+        if (!"PLAYING".equals(state.getPhase()) || !state.getDecisionStack().isEmpty()
+                || !submit.playerId().equals(state.getActivePlayer())) {
+            throw new EngineException("자기 턴(대기 결정 없음)에만 턴을 종료할 수 있습니다");
+        }
+        if (!state.isTurnEndPending()) {
+            throw new EngineException("메인 액션을 수행한 뒤에만 턴을 종료할 수 있습니다");
+        }
+        state.setTurnEndPending(false);
+        advanceTurn(state);
+        return List.of(event("TURN_ENDED", submit, Map.of(), List.of()));
     }
 
     /** 부스터 패스 점수 + 고급 타일 패스 점수 */
     private void applyPassVp(GameState state, String playerId) {
         PlayerState p = state.player(playerId);
+        String passCategory = "PASS_" + state.getRound(); // 부스터 패스 점수는 라운드별 세분화 (J-12)
         if (p.getBooster() != null) {
             JsonNode booster = findTile(data.tiles().get("boosters"), p.getBooster());
             if (booster.has("passVp")) {
                 int per = passVpCount(state, playerId, booster.get("passVp").get("per").asText());
-                p.setVp(p.getVp() + per * booster.get("passVp").get("vp").asInt());
+                gainVp(p, per * booster.get("passVp").get("vp").asInt(), passCategory);
             }
         }
+        // 고급 타일의 패스 발동 VP는 "고급 기술 타일" 항목으로 집계 (J-12)
         for (String tileId : p.getTechTiles()) {
             if (p.getCoveredTechTiles().contains(tileId) || !tileId.startsWith("ADV_")) {
                 continue;
             }
             switch (findTile(data.tech().get("advancedTiles"), tileId).path("special").asText("")) {
-                case "PASS_VP_3_PER_FEDERATION_TOKEN" -> p.setVp(p.getVp() + 3 * p.getFederationTokens().size());
-                case "PASS_VP_3_PER_RESEARCH_LAB" -> p.setVp(p.getVp() + 3 * builtCount(state, playerId, "RESEARCH_LAB"));
-                case "PASS_VP_1_PER_PLANET_TYPE" -> p.setVp(p.getVp() + colonizedPlanetTypes(state, playerId).size());
-                case "PASS_VP_2_PER_DEEP_SECTOR" -> p.setVp(p.getVp() + 2 * deepSectorsWithBuilding(state, playerId));
-                case "PASS_VP_2_PER_ASTEROID_AREA" -> p.setVp(p.getVp() + 2 * asteroidBuildings(state, playerId));
+                case "PASS_VP_3_PER_FEDERATION_TOKEN" -> gainVp(p, 3 * p.getFederationTokens().size(), "TECH_ADV");
+                case "PASS_VP_3_PER_RESEARCH_LAB" -> gainVp(p, 3 * builtCount(state, playerId, "RESEARCH_LAB"), "TECH_ADV");
+                case "PASS_VP_1_PER_PLANET_TYPE" -> gainVp(p, colonizedPlanetTypes(state, playerId).size(), "TECH_ADV");
+                case "PASS_VP_2_PER_DEEP_SECTOR" -> gainVp(p, 2 * deepSectorsWithBuilding(state, playerId), "TECH_ADV");
+                case "PASS_VP_2_PER_ASTEROID_AREA" -> gainVp(p, 2 * asteroidBuildings(state, playerId), "TECH_ADV");
                 default -> { }
             }
         }
@@ -915,7 +1011,7 @@ public class GameEngine {
     private int passVpCount(GameState state, String playerId, String per) {
         PlayerState p = state.player(playerId);
         return switch (per) {
-            case "MINE" -> builtCount(state, playerId, "MINE");
+            case "MINE" -> mineCountForScoring(state, playerId);
             case "TRADING_STATION" -> builtCount(state, playerId, "TRADING_STATION");
             case "RESEARCH_LAB" -> builtCount(state, playerId, "RESEARCH_LAB");
             case "PI_AND_ACADEMY" -> builtCount(state, playerId, "PLANETARY_INSTITUTE") + builtCount(state, playerId, "ACADEMY");
@@ -1087,7 +1183,12 @@ public class GameEngine {
                     throw new EngineException("사용할 수 없는 기술 타일입니다: " + id);
                 }
             }
-            default -> throw new EngineException("특수 액션 출처를 지정해야 합니다 (FACTION/BOOSTER/TECH_TILE)");
+            case "BUILDING" -> {
+                if (!"ACADEMY_QIC".equals(id) || qicAcademyCount(state, submit.playerId()) == 0) {
+                    throw new EngineException("사용할 수 없는 건물 액션입니다: " + id);
+                }
+            }
+            default -> throw new EngineException("특수 액션 출처를 지정해야 합니다 (FACTION/BOOSTER/TECH_TILE/BUILDING)");
         }
         if (id.startsWith("PI_ACTION") && builtCount(state, submit.playerId(), "PLANETARY_INSTITUTE") == 0) {
             throw new EngineException("행성 의회 건설 후 사용 가능합니다");
@@ -1117,6 +1218,14 @@ public class GameEngine {
             case "PI_ACTION_SPACE_STATION" -> ivitsPlaceStation(state, submit);
             case "PI_ACTION_ATTACH_RING" -> moweidsAttachRing(state, submit);
             case "PI_PERSONAL_ACTION_TILES" -> pushed.addAll(tinkeroidsUseAction(state, submit));
+            // 건물 액션: QIC 아카데미 (라운드 1회) — 발타크는 QIC 대신 크레딧 4 (I-1·I-12)
+            case "ACADEMY_QIC" -> {
+                if (hasAbility(faction, "QIC_ACADEMY_CREDITS_4")) {
+                    p.setCredits(p.getCredits() + 4);
+                } else {
+                    addQic(state, submit.playerId(), 1);
+                }
+            }
             default -> throw new EngineException("알 수 없는 특수 액션: " + id);
         }
         p.getUsedSpecialActions().add(key);
@@ -1127,7 +1236,7 @@ public class GameEngine {
                         "resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), pushed));
     }
 
-    /** 베스코드: 최저 레벨 트랙 하나 +1 (지식 무료). 최저가 여럿이면 그중 선택 */
+    /** 매드 안드로이드: 최저 레벨 트랙 하나 +1 (지식 무료). 최저가 여럿이면 그중 선택 */
     private void bescodsAdvanceLowest(GameState state, Submit submit) {
         String track = (String) submit.payload().get("track");
         if (track == null || !TRACK_NAMES.contains(track)) {
@@ -1154,21 +1263,13 @@ public class GameEngine {
         piHex.setBuildingType("MINE");
     }
 
-    /** 파이락 PI: 연구소 → 교역소 무료 업그레이드 + 지식 트랙 1칸 (✅명명 확정 — 일반 업그레이드 취급, 리치·라운드 점수 발생) */
+    /** 파이락 PI: 연구소 → 교역소 무료 업그레이드 + 지식 트랙 1칸 (✅명명 확정 — 일반 업그레이드 취급, 커밋은 upgradeCore 공용) */
     private List<Map<String, Object>> firaksFreeUpgrade(GameState state, Submit submit) {
         HexState hex = requireHex(state, submit);
-        PlayerState p = state.player(submit.playerId());
         if (!submit.playerId().equals(hex.getBuildingOwner()) || !"RESEARCH_LAB".equals(hex.getBuildingType())) {
             throw new EngineException("본인 연구소를 지정해야 합니다");
         }
-        if (p.stockOf("TRADING_STATION") < 1) {
-            throw new EngineException("교역소 재고가 없습니다");
-        }
-        p.getStock().merge("RESEARCH_LAB", 1, Integer::sum);
-        decreaseStock(p, "TRADING_STATION");
-        hex.setBuildingType("TRADING_STATION");
-        roundScore(state, p, "TRADING_STATION_BUILT", 1);
-        List<Map<String, Object>> pushed = new ArrayList<>(pushLeechDecisions(state, submit.playerId(), coordOf(submit)));
+        List<Map<String, Object>> pushed = upgradeCore(state, submit, hex, coordOf(submit), "TRADING_STATION");
         advanceTrackIfPossible(state, submit.playerId(), "SCIENCE");
         return pushed;
     }
@@ -1177,9 +1278,8 @@ public class GameEngine {
     private void ivitsPlaceStation(GameState state, Submit submit) {
         HexState hex = requireHex(state, submit);
         PlayerState p = state.player(submit.playerId());
-        if (!"EMPTY".equals(hex.getPlanet()) || hex.hasBuilding()
-                || hex.getSatelliteOwner() != null || hex.getShip() != null) {
-            throw new EngineException("우주정거장은 빈 우주 헥스에만 배치할 수 있습니다");
+        if (!"EMPTY".equals(hex.getPlanet()) || hex.hasBuilding() || hex.getShip() != null) {
+            throw new EngineException("우주정거장은 빈 우주 헥스에만 배치할 수 있습니다"); // 위성 있는 헥스는 허용
         }
         int qicForRange = intOf(submit.payload(), "qicForRange");
         checkRange(state, submit.playerId(), coordOf(submit), p, qicForRange, 0);
@@ -1207,17 +1307,28 @@ public class GameEngine {
     private static final List<String> TINK_POOL_EARLY = List.of("TINK_TERRAFORM_1", "TINK_POWER_4", "TINK_QIC_1");
     private static final List<String> TINK_POOL_LATE = List.of("TINK_TERRAFORM_3", "TINK_KNOWLEDGE_3", "TINK_QIC_2");
 
-    /** 라운드 시작(수입 전, ✅확정)에 팅커로이드 PI 보유자의 액션 타일 선택 결정 push */
-    private void pushTinkeroidsPicks(GameState state) {
-        for (Map.Entry<String, PlayerState> e : state.getPlayers().entrySet()) {
-            PlayerState p = e.getValue();
-            if (!hasAbility(data.faction(p.getFaction()), "PI_PERSONAL_ACTION_TILES")
-                    || builtCount(state, e.getKey(), "PLANETARY_INSTITUTE") == 0) {
-                continue;
+    /**
+     * 종족 능력 페이즈 (수입·가이아 페이즈 후, ✅확정 2026-07-22):
+     * 아이타 가이아 테크·팅커로이드 액션 타일 선택 — 이번 라운드 턴 순서(패스 순서)대로 선 플레이어부터 해소.
+     * 스택은 LIFO이므로 턴 역순으로 push한다.
+     */
+    private void pushAbilityPhase(GameState state) {
+        List<String> order = state.getTurnOrder();
+        for (int i = order.size() - 1; i >= 0; i--) {
+            String playerId = order.get(i);
+            PlayerState p = state.player(playerId);
+            JsonNode faction = data.faction(p.getFaction());
+            if (hasAbility(faction, "PI_GAIA_4_TO_TECH_TILE")
+                    && builtCount(state, playerId, "PLANETARY_INSTITUTE") > 0
+                    && p.getGaiaPower() >= 4) {
+                pushDecision(state, "ITARS_GAIA_TECH", playerId, Map.of("tokens", p.getGaiaPower()));
             }
-            List<String> options = tinkeroidsOptions(state, p);
-            if (!options.isEmpty()) {
-                pushDecision(state, "TINKEROIDS_ACTION_PICK", e.getKey(), Map.of("options", options));
+            if (hasAbility(faction, "PI_PERSONAL_ACTION_TILES")
+                    && builtCount(state, playerId, "PLANETARY_INSTITUTE") > 0) {
+                List<String> options = tinkeroidsOptions(state, p);
+                if (!options.isEmpty()) {
+                    pushDecision(state, "TINKEROIDS_ACTION_PICK", playerId, Map.of("options", options));
+                }
             }
         }
     }
@@ -1304,19 +1415,29 @@ public class GameEngine {
         if (p.getVp() < vpCost) {
             throw new EngineException("VP 부족 (함대 입장 비용: " + vpCost + ")");
         }
+        // 항해 거리 규칙 — 광산 건설과 동일: 초과분은 QIC로 지불 (game-spec 7.7-2 확정)
+        HexCoord shipCoord = state.getHexes().entrySet().stream()
+                .filter(e -> ship.equals(e.getValue().getShip()))
+                .map(e -> HexCoord.parse(e.getKey()))
+                .findFirst()
+                .orElseThrow(() -> new EngineException("맵에 없는 함대입니다: " + ship));
+        int qicForRange = intOf(submit.payload(), "qicForRange");
+        checkRange(state, submit.playerId(), shipCoord, p, qicForRange, 0);
+        requireResources(p, 0, 0, qicForRange);
         Map<String, Object> before = resourceSnapshot(p);
+        p.setQic(p.getQic() - qicForRange);
 
         // 종족 추가 비용: 네블라·아이타 토큰 1 영구 소각, 타클론 브레인스톤 가이아 이동
         if (hasAbility(faction, "FLEET_ENTRY_BURN_TOKEN")) {
             removeTokens(p, 1, Boolean.TRUE.equals(submit.payload().get("removeBrainstone")));
         }
         if (hasAbility(faction, "BRAINSTONE")) {
-            if ("GAIA".equals(p.getBrainstone())) {
-                throw new EngineException("브레인스톤이 이미 가이아 구역에 있어 입장할 수 없습니다");
+            if (p.getBrainstone() == null || "GAIA".equals(p.getBrainstone())) {
+                throw new EngineException("브레인스톤을 가이아 구역으로 이동할 수 없어 입장할 수 없습니다");
             }
             p.setBrainstone("GAIA");
         }
-        p.setVp(p.getVp() - vpCost);
+        gainVp(p, -vpCost, "FLEET");
 
         // 입장 순서 보너스 (같은 함대 기준): 2·3번째 파순 2, 4번째 파순 3
         int alreadyEntered = (int) state.getPlayers().values().stream()
@@ -1352,29 +1473,34 @@ public class GameEngine {
                 Boolean.TRUE.equals(submit.payload().get("removeBrainstone")),
                 nevlasPiDouble(state, submit.playerId()));
         if (action.has("gain")) {
-            gainResources(state, submit.playerId(), action.get("gain"));
+            gainResources(state, submit.playerId(), action.get("gain"), "FLEET");
         }
 
         List<Map<String, Object>> pushed = new ArrayList<>();
         switch (action.path("special").asText("")) {
-            case "VP_2_PLUS_1_PER_TECH_TILE" -> p.setVp(p.getVp() + 2 + p.getTechTiles().size());
-            case "VP_2_PLUS_1_PER_PLANET_TYPE" -> p.setVp(p.getVp() + 2 + planetTypesWithArtifacts(state, submit.playerId()));
+            case "VP_2_PLUS_1_PER_TECH_TILE" -> gainVp(p, 2 + p.getTechTiles().size(), "FLEET");
+            case "VP_2_PLUS_1_PER_PLANET_TYPE" -> gainVp(p, 2 + planetTypesWithArtifacts(state, submit.playerId()), "FLEET");
             case "INSTANT_GAIAFORM" -> instantGaiaform(state, submit);
             case "BUILD_MINE_TERRAFORM_1_FREE" -> pushed.add(pushFreeMine(state, submit.playerId(), 1, false, 0, null));
             case "ADVANCE_TRACK_1" -> paidTrackAdvance(state, submit.playerId(), (String) submit.payload().get("track"));
             case "BUILD_MINE_ON_ASTEROIDS" -> pushed.add(pushFreeMine(state, submit.playerId(), 0, true, 0, "ASTEROIDS"));
-            case "GAIN_BASIC_TECH_TILE" -> pushed.add(pushDecision(state, "CHOOSE_TECH_TILE", submit.playerId(), Map.of("basicOnly", true)));
-            case "UPGRADE_MINE_TO_TS" -> pushed.addAll(fleetUpgrade(state, submit, "MINE", "TRADING_STATION", false));
-            case "UPGRADE_TS_TO_LAB_WITH_TECH_TILE" -> pushed.addAll(fleetUpgrade(state, submit, "TRADING_STATION", "RESEARCH_LAB", true));
+            case "GAIN_TECH_TILE" -> pushed.add(pushDecision(state, "CHOOSE_TECH_TILE", submit.playerId(), Map.of()));
+            case "UPGRADE_MINE_TO_TS" -> pushed.addAll(fleetUpgrade(state, submit, "MINE", "TRADING_STATION"));
+            case "UPGRADE_TS_TO_LAB_WITH_TECH_TILE" -> pushed.addAll(fleetUpgrade(state, submit, "TRADING_STATION", "RESEARCH_LAB"));
             case "BUILD_MINE_RANGE_PLUS_3" -> pushed.add(pushFreeMine(state, submit.playerId(), 0, false, 3, null));
-            case "REUSE_FEDERATION_TOKEN" -> pushed.add(pushDecision(state, "CHOOSE_FED_TOKEN_REUSE", submit.playerId(), Map.of()));
+            case "REUSE_FEDERATION_TOKEN" -> {
+                if (p.getFederationTokens().isEmpty()) {
+                    throw new EngineException("보유한 연방 토큰이 없어 사용할 수 없는 액션입니다");
+                }
+                pushed.add(pushDecision(state, "CHOOSE_FED_TOKEN_REUSE", submit.playerId(), Map.of()));
+            }
             case "ACQUIRE_ARTIFACT" -> pushed.add(pushDecision(state, "CHOOSE_ARTIFACT", submit.playerId(), Map.of()));
             default -> { }
         }
         // QIC 액션 보너스 (ADV_TILE_21: QIC 액션당 4VP)
         if (action.path("qicAction").asBoolean(false)
                 && p.getTechTiles().contains("ADV_TILE_21") && !p.getCoveredTechTiles().contains("ADV_TILE_21")) {
-            p.setVp(p.getVp() + 4);
+            gainVp(p, 4, "QIC_ACTION"); // QIC 액션마다 +4VP (고급㉑) — 점수 창 별도 컬럼 (J-12)
         }
         state.getBoard().getPowerActionsUsedThisRound().add(actionId);
 
@@ -1425,33 +1551,22 @@ public class GameEngine {
     }
 
     /** 함대 업그레이드 (비용은 액션 비용에 포함 — 건설 자원 없음) */
-    private List<Map<String, Object>> fleetUpgrade(GameState state, Submit submit,
-                                                   String from, String to, boolean gainsTechTile) {
+    /** 함대 업그레이드 (리벨리온 광산→교역소, 트와일라잇 교역소→연구소): 비용은 함대 액션 비용으로 대체 — 커밋은 upgradeCore 공용 */
+    private List<Map<String, Object>> fleetUpgrade(GameState state, Submit submit, String from, String to) {
         HexState hex = requireHex(state, submit);
-        PlayerState p = state.player(submit.playerId());
         if (!submit.playerId().equals(hex.getBuildingOwner()) || !from.equals(hex.getBuildingType())) {
             throw new EngineException("대상이 본인 " + from + "이(가) 아닙니다");
         }
-        if (p.stockOf(to) < 1) {
-            throw new EngineException("재고 없음: " + to);
-        }
-        p.getStock().merge(from, 1, Integer::sum);
-        decreaseStock(p, to);
-        hex.setBuildingType(to);
-        roundScore(state, p, "TRADING_STATION".equals(to) ? "TRADING_STATION_BUILT" : "RESEARCH_LAB_BUILT", 1);
-
-        List<Map<String, Object>> pushed = new ArrayList<>();
-        if (gainsTechTile) {
-            pushed.add(pushDecision(state, "CHOOSE_TECH_TILE", submit.playerId(), Map.of("reason", to)));
-        }
-        pushed.addAll(pushLeechDecisions(state, submit.playerId(), coordOf(submit)));
-        return pushed;
+        return upgradeCore(state, submit, hex, coordOf(submit), to);
     }
 
     /** 함대 액션의 유료 트랙 전진 (검증 실패 시 예외 — 무료 전진과 달리 스킵하지 않음) */
     private void paidTrackAdvance(GameState state, String playerId, String track) {
         if (track == null || !TRACK_NAMES.contains(track)) {
             throw new EngineException("전진할 트랙을 지정해야 합니다");
+        }
+        if (navigationLocked(state, playerId, track)) {
+            throw new EngineException("발타크는 의회 건설 전까지 항해 트랙 전진 불가");
         }
         PlayerState p = state.player(playerId);
         int level = p.track(track);
@@ -1496,27 +1611,36 @@ public class GameEngine {
             throw new EngineException("이미 선점된 인공물입니다: " + artifactId);
         }
         PlayerState p = state.player(submit.playerId());
+        JsonNode artifact = findTile(data.actions().get("artifacts"), artifactId);
+        // ⑬ 연방 토큰 재수령: 보유 토큰이 없으면 획득 불가 (✅확정 2026-07-23)
+        if ("FEDERATION_TOKEN_DOUBLE_USE".equals(artifact.path("special").asText(""))
+                && p.getFederationTokens().isEmpty()) {
+            throw new EngineException("보유한 연방 토큰이 없어 획득할 수 없는 인공물입니다");
+        }
         Map<String, Object> before = resourceSnapshot(p);
 
         offers.put(artifactId, submit.playerId());
         p.getArtifacts().add(artifactId);
         state.getDecisionStack().remove(top);
-
-        JsonNode artifact = findTile(data.actions().get("artifacts"), artifactId);
         if (artifact.has("gain")) {
-            gainResources(state, submit.playerId(), artifact.get("gain"));
+            gainResources(state, submit.playerId(), artifact.get("gain"), "ARTIFACT");
         }
         switch (artifact.path("special").asText("")) {
-            case "VP_3_PER_DEEP_SECTOR_WITH_BUILDING" -> p.setVp(p.getVp() + 3 * deepSectorsWithBuilding(state, submit.playerId()));
+            case "VP_3_PER_DEEP_SECTOR_WITH_BUILDING" -> gainVp(p, 3 * deepSectorsWithBuilding(state, submit.playerId()), "ARTIFACT");
             case "VP_7_ASTEROIDS_AS_PLANET_TYPE_BUILDING_PLUS_1",
-                 "VP_7_TRANSCENDENT_AS_PLANET_TYPE_BUILDING_PLUS_1" -> p.setVp(p.getVp() + 7);
-            case "VP_3_PER_SCIENCE_LEVEL" -> p.setVp(p.getVp() + 3 * p.track("SCIENCE"));
-            case "VP_3_PER_GAIA_LEVEL" -> p.setVp(p.getVp() + 3 * p.track("GAIA_FORMING"));
+                 "VP_7_TRANSCENDENT_AS_PLANET_TYPE_BUILDING_PLUS_1" -> {
+                gainVp(p, 7, "ARTIFACT");
+                // 획득 = 가상 광산 건설 행동 취급 (H-3): 라운드 점수 + 건설 VP 타일 발동, 수입·재고·리치는 무관
+                roundScore(state, p, "MINE_PLACED", 1);
+                techMineBuildVp(p, false);
+            }
+            case "VP_3_PER_SCIENCE_LEVEL" -> gainVp(p, 3 * p.track("SCIENCE"), "ARTIFACT");
+            case "VP_3_PER_GAIA_LEVEL" -> gainVp(p, 3 * p.track("GAIA_FORMING"), "ARTIFACT");
             case "VP_3_PER_TRACK_LEVEL3_PLUS" -> {
                 int count = (int) p.getTracks().values().stream().filter(level -> level >= 3).count();
-                p.setVp(p.getVp() + 3 * count);
+                gainVp(p, 3 * count, "ARTIFACT");
             }
-            case "VP_3_PLUS_1_PER_PLANET_TYPE" -> p.setVp(p.getVp() + 3 + planetTypesWithArtifacts(state, submit.playerId()));
+            case "VP_3_PLUS_1_PER_PLANET_TYPE" -> gainVp(p, 3 + planetTypesWithArtifacts(state, submit.playerId()), "ARTIFACT");
             case "FEDERATION_TOKEN_DOUBLE_USE" -> pushDecision(state, "CHOOSE_FED_TOKEN_REUSE", submit.playerId(), Map.of());
             default -> { }
         }
@@ -1524,6 +1648,22 @@ public class GameEngine {
         return List.of(event("DECISION_RESOLVED", submit,
                 Map.of("artifact", artifactId,
                         "resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), List.of()));
+    }
+
+    /** QIC형 아카데미 보유 수 — 건물 특수 액션(ACADEMY_QIC) 사용 조건 */
+    private int qicAcademyCount(GameState state, String playerId) {
+        return (int) state.getHexes().values().stream()
+                .filter(h -> playerId.equals(h.getBuildingOwner()) && "ACADEMY".equals(h.getBuildingType())
+                        && "QIC".equals(h.getAcademyType()))
+                .count();
+    }
+
+    /** 점수용 광산 수 — 인공물 ⑦⑧ 가상 광산·검은행성 광산 포함 (수입 광산 수에는 미포함 — 3번째 광산 슬롯을 밀지 않도록) */
+    private int mineCountForScoring(GameState state, String playerId) {
+        return builtCount(state, playerId, "MINE")
+                + builtCount(state, playerId, "BLACK_PLANET_MINE")
+                + (int) state.player(playerId).getArtifacts().stream()
+                        .filter(a -> a.equals("ARTIFACT_7") || a.equals("ARTIFACT_8")).count();
     }
 
     /** 행성 종류 수 — ARTIFACT_7/8의 가상 종류 포함 */
@@ -1574,10 +1714,13 @@ public class GameEngine {
         requireResources(p, 0, 0, qicForRange);
         p.setQic(p.getQic() - qicForRange);
 
+        boolean newSector = !hasPresenceInSector(state, submit.playerId(), hex.getSectorId());
         hex.setPlanet("BLACK_PLANET");
         hex.setBuildingOwner(submit.playerId());
-        hex.setBuildingType("BLACK_PLANET_MINE"); // 광산 취급 (재고 미소모)
+        hex.setBuildingType("BLACK_PLANET_MINE"); // 광산 취급 (재고 미소모, 수입 무관 — E-3)
         roundScore(state, p, "MINE_PLACED", 1);
+        techMineBuildVp(p, false); // 광산 건설 행동 취급 — 고급⑯ 발동 (인공물 ⑦⑧과 동일 규칙)
+        newColonizationTriggers(state, submit.playerId(), newSector, true); // 검은행성 = 항상 새 행성 종류
         autoIncorporateIntoFederation(state, submit.playerId(), target);
 
         state.getDecisionStack().remove(top);
@@ -1634,7 +1777,9 @@ public class GameEngine {
             JsonNode opponentFaction = data.faction(opponent.getFaction());
             boolean taklonsPi = hasAbility(opponentFaction, "PI_LEECH_EXTRA_TOKEN")
                     && builtCount(state, opponentId, "PLANETARY_INSTITUTE") > 0;
-            boolean manualOne = hasAbility(opponentFaction, "LEECH_1_MANUAL") || taklonsPi;
+            boolean manualOne = hasAbility(opponentFaction, "LEECH_1_MANUAL")
+                    || (hasAbility(opponentFaction, "LEECH_1_MANUAL_WITH_PI")
+                            && builtCount(state, opponentId, "PLANETARY_INSTITUTE") > 0);
             if (amount == 1 && !manualOne) {
                 chargePower(opponent, 1); // 무비용 자동 수락 (아이타·타클론 PI는 수동 — edge-cases §4)
                 continue;
@@ -1659,7 +1804,24 @@ public class GameEngine {
     }
 
     private List<EngineEvent> applyLeechResponse(GameState state, Submit submit) {
-        Decision top = requireTopDecision(state, submit, "LEECH_RESPONSE");
+        // 리치는 동시 응답 허용 — 스택 상단의 연속된 LEECH_RESPONSE 블록 안에서는 순서 무관 (✅확정 2026-07-23)
+        Decision top = null;
+        for (int i = state.getDecisionStack().size() - 1; i >= 0; i--) {
+            Decision d = state.getDecisionStack().get(i);
+            if (!"LEECH_RESPONSE".equals(d.getType())) {
+                break;
+            }
+            if (d.getId().equals(submit.decisionId())) {
+                top = d;
+                break;
+            }
+        }
+        if (top == null) {
+            throw new EngineException("응답 가능한 리치 제안이 아닙니다: " + submit.decisionId());
+        }
+        if (!top.getTarget().equals(submit.playerId())) {
+            throw new EngineException("이 결정의 대상 플레이어가 아닙니다");
+        }
         boolean accepted = Boolean.TRUE.equals(submit.payload().get("accept"));
         PlayerState p = state.player(submit.playerId());
         Map<String, Object> before = resourceSnapshot(p);
@@ -1678,7 +1840,7 @@ public class GameEngine {
             } else {
                 chargePower(p, amount);
             }
-            p.setVp(p.getVp() - (int) top.getContext().get("vpCost"));
+            gainVp(p, -((int) top.getContext().get("vpCost")), "LEECH");
         }
         state.getDecisionStack().remove(top);
 
@@ -1784,7 +1946,7 @@ public class GameEngine {
 
     /**
      * 건물 파워값 — 리치·연방이 공유하는 단일 함수 (edge-cases §2: v1의 경로별 불일치 버그 방지).
-     * 보정: BASIC_TILE_9(+1, PI/아카데미), 베스코드 PI+티타늄(+1), 모웨이드 링(+2).
+     * 보정: BASIC_TILE_9(+1, PI/아카데미), 매드 안드로이드 PI+티타늄(+1), 모웨이드 링(+2).
      * 란티다 기생 광산은 헥스에 상대 건물과 공존하므로 호출부에서 고정 1로 합산한다.
      */
     private int buildingPowerValue(GameState state, String ownerId, HexState hex) {
@@ -1901,10 +2063,10 @@ public class GameEngine {
     /** 연방 타일의 보상·특수 효과 — 최초 획득과 재수령(TWILIGHT_FED, ARTIFACT_13)이 공유 */
     private void applyFederationTileEffects(GameState state, String playerId, JsonNode tile) {
         if (tile.has("gain")) {
-            gainResources(state, playerId, tile.get("gain"));
+            gainResources(state, playerId, tile.get("gain"), "FEDERATION");
         }
         switch (tile.path("special").asText("")) {
-            case "GAIN_BASIC_TECH_TILE" -> pushDecision(state, "CHOOSE_TECH_TILE", playerId, Map.of("basicOnly", true));
+            case "GAIN_TECH_TILE" -> pushDecision(state, "CHOOSE_TECH_TILE", playerId, Map.of());
             case "TERRAFORM_3_PLACE_MINE" -> pushFreeMine(state, playerId, 3, true, 0, null);
             case "PLACE_MINE_NO_RANGE_LIMIT" -> pushFreeMine(state, playerId, 0, true, 99, null);
             default -> { }
@@ -1928,6 +2090,28 @@ public class GameEngine {
                 .anyMatch(id -> occurrences(p.getFederationTokens(), id) > occurrences(p.getUsedFederationTokens(), id));
     }
 
+    /** 덮이지 않은 보유 기술 타일 — 패시브 효과 적용 여부 */
+    private static boolean hasActiveTile(PlayerState p, String tileId) {
+        return p.getTechTiles().contains(tileId) && !p.getCoveredTechTiles().contains(tileId);
+    }
+
+    /** 광산 건설 기술 타일 보너스: ADV_TILE_16(건설마다 +3VP), BASIC_TILE_8(가이아 행성 +3VP) */
+    private static void techMineBuildVp(PlayerState p, boolean gaia) {
+        if (hasActiveTile(p, "ADV_TILE_16")) {
+            gainVp(p, 3, "TECH_ADV");
+        }
+        if (gaia && hasActiveTile(p, "BASIC_TILE_8")) {
+            gainVp(p, 3, "TECH_BASIC");
+        }
+    }
+
+    /** 교역소 건설 기술 타일 보너스: ADV_TILE_17(건설마다 +3VP) */
+    private static void techTsBuildVp(PlayerState p) {
+        if (hasActiveTile(p, "ADV_TILE_17")) {
+            gainVp(p, 3, "TECH_ADV");
+        }
+    }
+
     private void flipUsableFederationToken(PlayerState p) {
         for (String id : p.getFederationTokens()) {
             if (occurrences(p.getFederationTokens(), id) > occurrences(p.getUsedFederationTokens(), id)) {
@@ -1942,13 +2126,13 @@ public class GameEngine {
         return (int) list.stream().filter(id::equals).count();
     }
 
-    private void gainResources(GameState state, String playerId, JsonNode gain) {
+    private void gainResources(GameState state, String playerId, JsonNode gain, String vpCategory) {
         PlayerState p = state.player(playerId);
         JsonNode faction = faction(state, playerId);
         p.setCredits(p.getCredits() + gain.path("credits").asInt(0));
         p.setOre(p.getOre() + gain.path("ore").asInt(0));
         p.setKnowledge(p.getKnowledge() + gain.path("knowledge").asInt(0));
-        p.setVp(p.getVp() + gain.path("vp").asInt(0));
+        gainVp(p, gain.path("vp").asInt(0), vpCategory);
         p.setBowl1(p.getBowl1() + gain.path("powerTokens").asInt(0));
         p.setBowl3(p.getBowl3() + gain.path("powerTokensBowl3").asInt(0));
         int qic = gain.path("qic").asInt(0);
@@ -1978,16 +2162,17 @@ public class GameEngine {
         String tileId = state.getBoard().getRoundScoringTiles().get(round - 1);
         JsonNode tile = findTile(data.tiles().get("roundScoringTiles"), tileId);
         if (event.equals(tile.get("event").asText())) {
-            p.setVp(p.getVp() + tile.get("vp").asInt() * count);
+            gainVp(p, tile.get("vp").asInt() * count, "ROUND_" + round); // 라운드별 세분화 (J-12)
         }
     }
 
     // ═══════════════ 판정 헬퍼 ═══════════════
 
     /** 링 순환 거리 기반 삽 수 (종족 고정 삽·확장 행성 규칙 반영) */
-    private int terraformShovels(GameState state, JsonNode faction, String targetPlanet) {
+    private int terraformShovels(PlayerState p, JsonNode faction, String targetPlanet) {
         String home = faction.get("homePlanet").asText();
-        if (home.equals(targetPlanet)) {
+        // 확장 종족은 홈 행성이 없다 (표기 행성 = 초기 배치용 시작 행성) — 0삽 행성 없음
+        if (!faction.path("expansion").asBoolean(false) && home.equals(targetPlanet)) {
             return 0;
         }
         if ("TRANSCENDENT".equals(targetPlanet) || "BLACK_PLANET".equals(targetPlanet)) {
@@ -2000,17 +2185,9 @@ public class GameEngine {
             return 2;
         }
         if (hasAbility(faction, "TERRAFORM_HOME_3_OTHERS_1")) {
-            return otherHomePlanets(state).contains(targetPlanet) ? 3 : 1;
+            return p.getThreeShovelPlanets().contains(targetPlanet) ? 3 : 1;
         }
         return ringDistance(home, targetPlanet);
-    }
-
-    private List<String> otherHomePlanets(GameState state) {
-        List<String> homes = new ArrayList<>();
-        for (PlayerState p : state.getPlayers().values()) {
-            homes.add(data.faction(p.getFaction()).get("homePlanet").asText());
-        }
-        return homes;
     }
 
     private int ringDistance(String from, String to) {
@@ -2035,7 +2212,8 @@ public class GameEngine {
     private void checkRange(GameState state, String playerId, HexCoord target, PlayerState p,
                             int qicForRange, int rangeBonus) {
         int range = data.tech().get("navRangeByLevel").get(p.track("NAVIGATION")).asInt()
-                + qicForRange * 2 + rangeBonus;
+                + qicForRange * 2 + rangeBonus
+                + (hasActiveTile(p, "BASIC_EXP_TILE_1") ? 1 : 0); // 확장 기본 타일: 기본 거리 +1
         int best = Integer.MAX_VALUE;
         for (Map.Entry<String, HexState> e : state.getHexes().entrySet()) {
             if (playerId.equals(e.getValue().getBuildingOwner())
@@ -2083,30 +2261,72 @@ public class GameEngine {
 
     private int gaiaPlanetCount(GameState state, String playerId) {
         return (int) state.getHexes().values().stream()
-                .filter(h -> playerId.equals(h.getBuildingOwner()) && "GAIA".equals(h.getPlanet()))
+                .filter(h -> hasBuildingOf(h, playerId) && "GAIA".equals(h.getPlanet()))
                 .count();
     }
 
     private Set<String> colonizedPlanetTypes(GameState state, String playerId) {
         Set<String> types = new HashSet<>();
         for (HexState h : state.getHexes().values()) {
-            if (playerId.equals(h.getBuildingOwner()) && h.hasBuilding() && !"EMPTY".equals(h.getPlanet())) {
+            if (playerId.equals(h.getBuildingOwner()) && h.hasBuilding() && !"EMPTY".equals(h.getPlanet())
+                    && !"GAIAFORMER".equals(h.getBuildingType())) { // 포머 배치만으로는 개척 아님
                 types.add(h.getPlanet());
             }
         }
         return types;
     }
 
+    /** 이 섹터에 내 구조물(건물·기생 광산, 가이아포머 제외)이 이미 있는가 — 새 섹터 진입 판정 */
+    private boolean hasPresenceInSector(GameState state, String playerId, String sectorId) {
+        for (HexState h : state.getHexes().values()) {
+            if (!sectorId.equals(h.getSectorId())) {
+                continue;
+            }
+            if ((playerId.equals(h.getBuildingOwner()) && !"GAIAFORMER".equals(h.getBuildingType()))
+                    || playerId.equals(h.getParasiteOwner())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 새 섹터 진입·새 행성 종류 개척 트리거 (라운드 점수 + 기오덴·다카니안 PI 패시브) — 커밋 후 호출 */
+    private void newColonizationTriggers(GameState state, String playerId, boolean newSector, boolean newPlanetType) {
+        PlayerState p = state.player(playerId);
+        JsonNode faction = data.faction(p.getFaction());
+        if (newSector) {
+            roundScore(state, p, "NEW_SECTOR_ENTERED", 1);
+            if (hasAbility(faction, "PI_NEW_SECTOR_MINE_BONUS")
+                    && builtCount(state, playerId, "PLANETARY_INSTITUTE") > 0) {
+                p.setCredits(p.getCredits() + 2); // 다카니안 PI: 새 섹터 광산 +2크레딧 +1지식
+                p.setKnowledge(p.getKnowledge() + 1);
+            }
+        }
+        if (newPlanetType) {
+            roundScore(state, p, "NEW_PLANET_TYPE_COLONIZED", 1);
+            if (hasAbility(faction, "PI_NEW_PLANET_TYPE_KNOWLEDGE_3")
+                    && builtCount(state, playerId, "PLANETARY_INSTITUTE") > 0) {
+                p.setKnowledge(p.getKnowledge() + 3); // 기오덴 PI: 새 행성 타입 개척 +3지식
+            }
+        }
+    }
+
+    /** 건물 보유 판정 — 란티다 기생 광산 포함, 가이아포머 제외 (포머는 건물이 아님) */
+    private static boolean hasBuildingOf(HexState h, String playerId) {
+        return (playerId.equals(h.getBuildingOwner()) && !"GAIAFORMER".equals(h.getBuildingType()))
+                || playerId.equals(h.getParasiteOwner());
+    }
+
     private int buildingsInBaseSectors(GameState state, String playerId) {
         return (int) state.getHexes().values().stream()
-                .filter(h -> playerId.equals(h.getBuildingOwner()) && h.getSectorId().startsWith("SECTOR_"))
+                .filter(h -> hasBuildingOf(h, playerId) && h.getSectorId().startsWith("SECTOR_"))
                 .count();
     }
 
     private int deepSectorsWithBuilding(GameState state, String playerId) {
         Set<String> sectors = new HashSet<>();
         for (HexState h : state.getHexes().values()) {
-            if (playerId.equals(h.getBuildingOwner()) && h.getSectorId().startsWith("DEEP_")) {
+            if (hasBuildingOf(h, playerId) && h.getSectorId().startsWith("DEEP_")) {
                 sectors.add(h.getSectorId());
             }
         }
@@ -2115,14 +2335,15 @@ public class GameEngine {
 
     private int deepSectorBuildings(GameState state, String playerId) {
         return (int) state.getHexes().values().stream()
-                .filter(h -> playerId.equals(h.getBuildingOwner()) && h.getSectorId().startsWith("DEEP_"))
+                .filter(h -> hasBuildingOf(h, playerId) && h.getSectorId().startsWith("DEEP_"))
                 .count();
     }
 
     private int asteroidBuildings(GameState state, String playerId) {
         return (int) state.getHexes().values().stream()
-                .filter(h -> playerId.equals(h.getBuildingOwner()) && "ASTEROIDS".equals(h.getPlanet()))
-                .count();
+                .filter(h -> hasBuildingOf(h, playerId) && "ASTEROIDS".equals(h.getPlanet()))
+                .count()
+                + (state.player(playerId).getArtifacts().contains("ARTIFACT_7") ? 1 : 0); // ⑦ 가상 소행성 광산 포함
     }
 
     // ═══════════════ 공통 헬퍼 ═══════════════
@@ -2137,32 +2358,7 @@ public class GameEngine {
                 return;
             }
         }
-        endRound(state); // 전원 패스
-    }
-
-    /** 라운드 종료 — 아이타 가이아 페이즈는 라운드 종료 소속 (edge-cases §7): 결정 해소 후 마감 재개 */
-    private void endRound(GameState state) {
-        if (pushItarsGaiaTech(state)) {
-            state.setRoundEndPending(true);
-            return;
-        }
-        finishRound(state);
-    }
-
-    /** 아이타 PI: 가이아 구역 파워 4개 단위 → 기본 기술 타일 선택 (6라운드 종료 포함) */
-    private boolean pushItarsGaiaTech(GameState state) {
-        boolean pushed = false;
-        for (Map.Entry<String, PlayerState> e : state.getPlayers().entrySet()) {
-            PlayerState p = e.getValue();
-            if (hasAbility(data.faction(p.getFaction()), "PI_GAIA_4_TO_TECH_TILE")
-                    && builtCount(state, e.getKey(), "PLANETARY_INSTITUTE") > 0
-                    && p.getGaiaPower() >= 4) {
-                state.getDecisionStack().add(new Decision(state.newDecisionId(),
-                        "ITARS_GAIA_TECH", e.getKey(), Map.of("tokens", p.getGaiaPower())));
-                pushed = true;
-            }
-        }
-        return pushed;
+        finishRound(state); // 전원 패스 → 라운드 종료
     }
 
     /** 최종 점수 또는 다음 라운드 진입 (가이아 페이즈 → 수입 페이즈, decision-flows §3) */
@@ -2184,9 +2380,9 @@ public class GameEngine {
                 p.setBaltaksConvertedFormers(0);
             }
         }
+        incomePhase(state);       // 라운드 진입 순서: 수입 → 가이아 → 종족 능력 (✅확정 2026-07-22)
         gaiaPhase(state);
-        pushTinkeroidsPicks(state); // 액션 타일 선택은 수입 적용 전 (✅확정)
-        incomePhase(state);
+        pushAbilityPhase(state);  // 종족 능력 — 새 턴 순서(패스 순서)대로 해소
         state.setActivePlayer(state.getTurnOrder().get(0));
     }
 
@@ -2209,6 +2405,12 @@ public class GameEngine {
                 continue;
             }
             JsonNode faction = data.faction(p.getFaction());
+            // 아이타 PI(4개 이상): 종족 능력 페이즈의 ITARS_GAIA_TECH에서 처리 (잔여분 bowl1 복귀 포함)
+            if (hasAbility(faction, "PI_GAIA_4_TO_TECH_TILE")
+                    && builtCount(state, e.getKey(), "PLANETARY_INSTITUTE") > 0
+                    && p.getGaiaPower() >= 4) {
+                continue;
+            }
             if (hasAbility(faction, "GAIA_POWER_RETURN_BOWL2")) {
                 if (hasAbility(faction, "PI_GAIA_TOKEN_CONVERT")
                         && builtCount(state, e.getKey(), "PLANETARY_INSTITUTE") > 0) {
@@ -2251,7 +2453,7 @@ public class GameEngine {
                 Map.of("resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), List.of()));
     }
 
-    /** 아이타 PI: 가이아 구역 파워 4개당 기본 기술 타일 1개 (희생 수 선택), 잔여분 bowl1 복귀 */
+    /** 아이타 PI: 가이아 구역 파워 4개당 기술 타일 1개 — 기본/고급 무관 (희생 수 선택), 잔여분 bowl1 복귀 */
     private List<EngineEvent> applyItarsGaiaTech(GameState state, Submit submit) {
         Decision top = requireTopDecision(state, submit, "ITARS_GAIA_TECH");
         PlayerState p = state.player(submit.playerId());
@@ -2264,7 +2466,7 @@ public class GameEngine {
         p.setGaiaPower(0);
         p.setBowl1(p.getBowl1() + tokens - sacrifice * 4); // 희생분은 영구 제거
         for (int i = 0; i < sacrifice; i++) {
-            pushDecision(state, "CHOOSE_TECH_TILE", submit.playerId(), Map.of("basicOnly", true));
+            pushDecision(state, "CHOOSE_TECH_TILE", submit.playerId(), Map.of());
         }
         return List.of(event("DECISION_RESOLVED", submit,
                 Map.of("sacrificed", sacrifice * 4, "techTiles", sacrifice), List.of()));
@@ -2285,7 +2487,7 @@ public class GameEngine {
             gains.put("ore", income.ore());
             gains.put("knowledge", income.knowledge());
             gains.put("vp", income.vp());
-            gainResources(state, playerId, toNode(gains));
+            gainResources(state, playerId, toNode(gains), "INCOME");
             addQic(state, playerId, income.qic());
 
             if (income.charge() > 0 && income.tokens() > 0 && powerOrderMatters(p, income)) {
@@ -2457,7 +2659,7 @@ public class GameEngine {
         if (amount <= 0) {
             return;
         }
-        gainResources(state, playerId, toNode(Map.of("qic", amount)));
+        gainResources(state, playerId, toNode(Map.of("qic", amount)), "GAIN");
     }
 
     private JsonNode toNode(Map<String, Object> map) {
@@ -2480,19 +2682,46 @@ public class GameEngine {
             PlayerState p = e.getValue();
             for (int level : p.getTracks().values()) {
                 if (level >= 3) {
-                    p.setVp(p.getVp() + vpPerLevel * (level - 2)); // 레벨 3 이상 칸당
+                    gainVp(p, vpPerLevel * (level - 2), "FINAL_TRACK"); // 레벨 3 이상 칸당
                 }
             }
             boolean nevlasPi = hasAbility(data.faction(p.getFaction()), "PI_BOWL3_DOUBLE_VALUE")
                     && builtCount(state, e.getKey(), "PLANETARY_INSTITUTE") > 0;
             int bowl3 = p.getBowl3() * (nevlasPi ? 2 : 1) + ("BOWL3".equals(p.getBrainstone()) ? 1 : 0);
             int resources = p.getCredits() + p.getOre() + p.getKnowledge() + p.getQic() + bowl3;
-            p.setVp(p.getVp() + resources / resourcesPerVp);
-            p.setVp(p.getVp() - p.getBidVp()); // 종족 비딩값 차감 (decision-flows §4)
+            gainVp(p, resources / resourcesPerVp, "FINAL_RESOURCES");
+            gainVp(p, -p.getBidVp(), "BID"); // 종족 비딩값 차감 (decision-flows §4)
+        }
+        assignFinalRanks(state);
+    }
+
+    /** 최종 순위: 총점 내림차순 — 동률이면 비딩값이 적은 쪽 승리, 총점·비딩 모두 같으면 공동 순위 (J-10) */
+    static void assignFinalRanks(GameState state) {
+        List<PlayerState> ranking = new ArrayList<>(state.getPlayers().values());
+        ranking.sort((a, b) -> {
+            int byVp = Integer.compare(b.getVp(), a.getVp());
+            return byVp != 0 ? byVp : Integer.compare(a.getBidVp(), b.getBidVp());
+        });
+        int rank = 0;
+        PlayerState prev = null;
+        for (int i = 0; i < ranking.size(); i++) {
+            PlayerState p = ranking.get(i);
+            if (prev == null || p.getVp() != prev.getVp() || p.getBidVp() != prev.getBidVp()) {
+                rank = i + 1;
+            }
+            p.setFinalRank(rank);
+            prev = p;
         }
     }
 
     private void awardRankVp(GameState state, String metric) {
+        for (Map.Entry<String, Integer> e : rankVpFor(state, metric).entrySet()) {
+            gainVp(state.player(e.getKey()), e.getValue(), "FINAL_RANK");
+        }
+    }
+
+    /** 최종 타일 순위 VP 산출 (적용 없음 — awardRankVp·finalScorePreview 공용) */
+    private Map<String, Integer> rankVpFor(GameState state, String metric) {
         List<Map.Entry<String, Integer>> scores = new ArrayList<>();
         for (String playerId : state.getPlayers().keySet()) {
             scores.add(Map.entry(playerId, finalMetric(state, playerId, metric)));
@@ -2500,6 +2729,7 @@ public class GameEngine {
         scores.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
         JsonNode rankVp = data.tiles().get("finalScoring").get("rankVp");
 
+        Map<String, Integer> result = new LinkedHashMap<>();
         int position = 0;
         while (position < scores.size()) {
             int value = scores.get(position).getValue();
@@ -2514,12 +2744,48 @@ public class GameEngine {
                 }
                 int share = sum / (groupEnd - position + 1);
                 for (int r = position; r <= groupEnd; r++) {
-                    PlayerState p = state.player(scores.get(r).getKey());
-                    p.setVp(p.getVp() + share);
+                    result.merge(scores.get(r).getKey(), share, Integer::sum);
                 }
             }
             position = groupEnd + 1;
         }
+        return result;
+    }
+
+    /** 최종 점수 미리보기 — 현재 상태 기준 예상치 (상태 무변경, FE 점수창 실시간 표시용) */
+    public Map<String, Map<String, Integer>> finalScorePreview(GameState state) {
+        Map<String, Integer> rank = new LinkedHashMap<>();
+        for (String tileId : state.getBoard().getFinalScoringTiles()) {
+            String metric = findTile(data.tiles().get("finalScoringTiles"), tileId).get("metric").asText();
+            rankVpFor(state, metric).forEach((pid, vp) -> rank.merge(pid, vp, Integer::sum));
+        }
+        JsonNode rankConfig = data.tiles().get("finalScoring");
+        int vpPerLevel = rankConfig.get("knowledgeTrackLevel3PlusVpPerLevel").asInt();
+        int resourcesPerVp = rankConfig.get("resourcesPerVp").asInt();
+
+        Map<String, Map<String, Integer>> result = new LinkedHashMap<>();
+        for (Map.Entry<String, PlayerState> e : state.getPlayers().entrySet()) {
+            PlayerState p = e.getValue();
+            int track = 0;
+            for (int level : p.getTracks().values()) {
+                if (level >= 3) {
+                    track += vpPerLevel * (level - 2);
+                }
+            }
+            boolean nevlasPi = hasAbility(data.faction(p.getFaction()), "PI_BOWL3_DOUBLE_VALUE")
+                    && builtCount(state, e.getKey(), "PLANETARY_INSTITUTE") > 0;
+            int bowl3 = p.getBowl3() * (nevlasPi ? 2 : 1) + ("BOWL3".equals(p.getBrainstone()) ? 1 : 0);
+            int resources = (p.getCredits() + p.getOre() + p.getKnowledge() + p.getQic() + bowl3) / resourcesPerVp;
+
+            Map<String, Integer> view = new LinkedHashMap<>();
+            view.put("rank", rank.getOrDefault(e.getKey(), 0));
+            view.put("track", track);
+            view.put("resources", resources);
+            view.put("bid", p.getBidVp());
+            view.put("projectedTotal", p.getVp() + view.get("rank") + track + resources - p.getBidVp());
+            result.put(e.getKey(), view);
+        }
+        return result;
     }
 
     private int finalMetric(GameState state, String playerId, String metric) {
@@ -2527,12 +2793,12 @@ public class GameEngine {
             case "ASTEROID_BUILDINGS" -> asteroidBuildings(state, playerId);
             case "GAIA_PLANETS" -> gaiaPlanetCount(state, playerId);
             case "TOTAL_BUILDINGS" -> (int) state.getHexes().values().stream()
-                    .filter(h -> playerId.equals(h.getBuildingOwner())
+                    .filter(h -> hasBuildingOf(h, playerId)
                             && !"GAIAFORMER".equals(h.getBuildingType())
                             && !"SPACE_STATION".equals(h.getBuildingType()))
                     .count()
                     + (int) state.player(playerId).getArtifacts().stream()
-                            .filter(a -> a.equals("ARTIFACT_7") || a.equals("ARTIFACT_8")).count();
+                            .filter(a -> a.equals("ARTIFACT_7") || a.equals("ARTIFACT_8")).count(); // ⑦⑧ 가상 건물 포함 (H-3)
             case "FEDERATION_BUILDINGS" -> {
                 Set<String> keys = new HashSet<>();
                 for (Map<String, Object> group : state.player(playerId).getFederations()) {
@@ -2550,7 +2816,7 @@ public class GameEngine {
             case "DEEP_SECTORS_WITH_BUILDING" -> deepSectorsWithBuilding(state, playerId);
             case "PLANET_TYPES" -> planetTypesWithArtifacts(state, playerId);
             case "SATELLITES" -> (int) state.getHexes().values().stream()
-                    .filter(h -> playerId.equals(h.getSatelliteOwner())).count();
+                    .filter(h -> h.getSatelliteOwners().contains(playerId)).count();
             case "MAX_PI_ACADEMY_DISTANCE" -> {
                 List<HexCoord> pis = new ArrayList<>();
                 List<HexCoord> academies = new ArrayList<>();
@@ -2575,7 +2841,7 @@ public class GameEngine {
             case "BASE_SECTORS_WITH_BUILDING" -> {
                 Set<String> sectors = new HashSet<>();
                 for (HexState h : state.getHexes().values()) {
-                    if (playerId.equals(h.getBuildingOwner()) && h.getSectorId().startsWith("SECTOR_")) {
+                    if (hasBuildingOf(h, playerId) && h.getSectorId().startsWith("SECTOR_")) {
                         sectors.add(h.getSectorId());
                     }
                 }
@@ -2624,6 +2890,9 @@ public class GameEngine {
         if (!submit.playerId().equals(state.getActivePlayer())) {
             throw new EngineException("현재 턴이 아닙니다");
         }
+        if (state.isTurnEndPending()) {
+            throw new EngineException("이미 메인 액션을 수행했습니다 — 자유 행동 또는 턴 종료만 가능합니다");
+        }
     }
 
     private HexState requireHex(GameState state, Submit submit) {
@@ -2636,6 +2905,37 @@ public class GameEngine {
 
     private HexCoord coordOf(Submit submit) {
         return new HexCoord(intOf(submit.payload(), "hexQ"), intOf(submit.payload(), "hexR"));
+    }
+
+    /**
+     * VP 증감은 반드시 이 헬퍼로 — 카테고리별 분해(vpBreakdown)가 점수 팝업·종료 상세의 데이터다.
+     * 카테고리: START/ROUND/PASS/TECH_TILE/TRACK/FEDERATION/FLEET/ARTIFACT/POWER_ACTION/FACTION/
+     *          LEECH/INCOME/BID/FINAL_TRACK/FINAL_RESOURCES/FINAL_RANK/GAIN
+     */
+    private static void gainVp(PlayerState p, int amount, String category) {
+        if (amount == 0) {
+            return;
+        }
+        p.setVp(p.getVp() + amount);
+        p.getVpBreakdown().merge(category, amount, Integer::sum);
+    }
+
+    /** 수입 미리보기 — 다음 수입 페이즈 예상값 (FE 플레이어 카드 위첨자용) */
+    public Map<String, Map<String, Integer>> incomePreview(GameState state) {
+        Map<String, Map<String, Integer>> result = new LinkedHashMap<>();
+        for (String playerId : state.getPlayers().keySet()) {
+            Income income = computeIncome(state, playerId);
+            Map<String, Integer> view = new LinkedHashMap<>();
+            view.put("credits", income.credits());
+            view.put("ore", income.ore());
+            view.put("knowledge", income.knowledge());
+            view.put("qic", income.qic());
+            view.put("vp", income.vp());
+            view.put("powerCharge", income.charge());
+            view.put("powerTokens", income.tokens());
+            result.put(playerId, view);
+        }
+        return result;
     }
 
     private static int intOf(Map<String, Object> payload, String key) {

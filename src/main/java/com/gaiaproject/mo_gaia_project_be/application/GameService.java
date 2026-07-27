@@ -45,8 +45,14 @@ public class GameService {
 
     public record SeatRequest(String nickname, String faction) {}
 
-    /** 방 옵션 — undoPolicy: FREE(친선)/CONSENT(표준)/NONE(경쟁), leechTimerSeconds: 리치 응답 제한(null=끔) */
-    public record GameOptions(boolean bidding, String undoPolicy, Integer leechTimerSeconds) {
+    /**
+     * 방 옵션 — undoPolicy: FREE(친선)/CONSENT(표준)/NONE(경쟁), leechTimerSeconds: 리치 응답 제한(null=끔),
+     * bidMode: ORDER(모드 a — 종족·턴 슬롯 사전 고정) / PICK(모드 b — 낙찰자가 턴 순번 선택),
+     * localMode: 1인 플레이(방장 혼자 4좌석 조작, game-spec §3-4) — 언두 FREE 강제.
+     * localMode && !bidding: 비딩 없이 4종족 무작위 배정 후 바로 SETUP_MINES로 시작
+     */
+    public record GameOptions(boolean bidding, String undoPolicy, Integer leechTimerSeconds, String bidMode,
+                              boolean localMode) {
         public GameOptions {
             if (undoPolicy == null) {
                 undoPolicy = "FREE";
@@ -57,18 +63,39 @@ public class GameService {
             if (leechTimerSeconds != null && leechTimerSeconds < 5) {
                 throw new IllegalArgumentException("리치 타이머는 5초 이상이어야 합니다");
             }
+            if (bidMode == null) {
+                bidMode = "ORDER";
+            }
+            if (!List.of("ORDER", "PICK").contains(bidMode)) {
+                throw new IllegalArgumentException("알 수 없는 비딩 모드: " + bidMode);
+            }
+            if (localMode) {
+                undoPolicy = "FREE"; // 1인 4역 — 언두 동의 개념 없음
+            }
         }
 
         public GameOptions(boolean bidding, String undoPolicy) {
-            this(bidding, undoPolicy, null);
+            this(bidding, undoPolicy, null, null, false);
+        }
+
+        public GameOptions(boolean bidding, String undoPolicy, Integer leechTimerSeconds) {
+            this(bidding, undoPolicy, leechTimerSeconds, null, false);
+        }
+
+        public GameOptions(boolean bidding, String undoPolicy, Integer leechTimerSeconds, String bidMode) {
+            this(bidding, undoPolicy, leechTimerSeconds, bidMode, false);
         }
 
         public Map<String, Object> asMap() {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("bidding", bidding);
             map.put("undoPolicy", undoPolicy);
+            map.put("bidMode", bidMode);
             if (leechTimerSeconds != null) {
                 map.put("leechTimerSeconds", leechTimerSeconds);
+            }
+            if (localMode) {
+                map.put("localMode", true);
             }
             return map;
         }
@@ -144,7 +171,8 @@ public class GameService {
 
         GameState state = bidding
                 ? GameSetup.createWithBidding(gameData, seed,
-                        engineSeats.stream().map(GameSetup.PlayerSeat::playerId).toList())
+                        engineSeats.stream().map(GameSetup.PlayerSeat::playerId).toList(),
+                        "PICK".equals(options.bidMode()))
                 : GameSetup.create(gameData, seed, engineSeats);
 
         GameEntity game = games.save(GameEntity.builder()
@@ -174,14 +202,28 @@ public class GameService {
 
     /**
      * 로비 방(WAITING) → 게임 시작. RoomService의 트랜잭션 안에서 호출된다 (락은 호출부가 보유).
-     * 비딩 방은 SETUP_BID로, 아니면 좌석의 종족으로 바로 SETUP_MINES로 진입한다.
+     * 비딩 방은 SETUP_BID로, 1인 플레이+비딩 없음은 4종족 무작위 배정 후 바로 SETUP_MINES로,
+     * 그 외(비딩 없음)는 좌석에 미리 정해진 종족으로 바로 SETUP_MINES로 진입한다.
      */
     public void startGame(GameEntity game, List<GamePlayerEntity> members) {
         Map<String, Object> options = codec.readMap(game.getOptions());
+        boolean localMode = Boolean.TRUE.equals(options.get("localMode"));
         GameState state;
         if (Boolean.TRUE.equals(options.get("bidding"))) {
-            state = GameSetup.createWithBidding(gameData, game.getRngSeed(),
-                    members.stream().map(m -> m.getUserId().toString()).toList());
+            List<String> playerIds;
+            if (localMode) {
+                // 1인 플레이 — 방장 1행 유지, 엔진 좌석은 "유저UUID#1"~"#4" 합성 id
+                String host = members.get(0).getUserId().toString();
+                playerIds = List.of(host + "#1", host + "#2", host + "#3", host + "#4");
+            } else {
+                playerIds = members.stream().map(m -> m.getUserId().toString()).toList();
+            }
+            state = GameSetup.createWithBidding(gameData, game.getRngSeed(), playerIds,
+                    "PICK".equals(options.get("bidMode")));
+        } else if (localMode) {
+            String host = members.get(0).getUserId().toString();
+            List<String> playerIds = List.of(host + "#1", host + "#2", host + "#3", host + "#4");
+            state = GameSetup.createLocalRandom(gameData, game.getRngSeed(), playerIds);
         } else {
             List<GameSetup.PlayerSeat> seats = new ArrayList<>();
             for (GamePlayerEntity member : members) {
@@ -219,6 +261,9 @@ public class GameService {
             throw new VersionConflictException(expectedVersion, game.getLastSeq());
         }
         GameState state = loadLatestState(gameId);
+        if (Boolean.TRUE.equals(codec.readMap(game.getOptions()).get("localMode"))) {
+            submit = localModeSubmit(gameId, state, submit);
+        }
 
         List<EngineEvent> engineEvents = new ArrayList<>(
                 engine.apply(state, submit)); // 검증 실패 시 EngineException → 롤백
@@ -246,15 +291,37 @@ public class GameService {
         game.setLastSeq(seq);
         game.setStatus(statusOf(state));
         rebuildPendingProjection(game, state, seq);
+        if ("FINISHED".equals(game.getStatus())) {
+            persistFinalResults(gameId, state);
+        }
 
         broadcastAfterCommit(gameId, seq, engineEvents);
         return new SubmitResult(seq, engineEvents);
     }
 
+    /** 게임 종료 시 최종 점수·순위를 game_player에 저장 (로컬 모드 합성 좌석은 행이 없어 스킵) */
+    private void persistFinalResults(UUID gameId, GameState state) {
+        for (Map.Entry<String, com.gaiaproject.mo_gaia_project_be.engine.model.PlayerState> e
+                : state.getPlayers().entrySet()) {
+            UUID userId;
+            try {
+                userId = UUID.fromString(e.getKey());
+            } catch (IllegalArgumentException ex) {
+                continue;
+            }
+            players.findById(new GamePlayerEntity.Key(gameId, userId)).ifPresent(row -> {
+                row.setFinalScore(e.getValue().getVp());
+                row.setFinalRank((short) e.getValue().getFinalRank());
+                players.save(row);
+            });
+        }
+    }
+
     // ═══════════════ 턴 초기화 (언두) ═══════════════
 
     /**
-     * 요청자의 마지막 메인 액션(ACTION_*) 직전 상태로 복원.
+     * 요청자의 마지막 되돌림 단위(메인 액션 ACTION_* 또는 자유 변환 FREE_ACTION_CONVERTED) 직전 상태로 복원.
+     * 자유 변환은 자기 턴·결정 스택 빈 상태에서만 가능하므로 직전 seq 스냅샷이 항상 CHECKPOINT로 남아 있다.
      * 언두 정책(방 옵션): FREE 자유 / NONE 금지 / CONSENT — 상대의 수동 응답이 있으면 거부
      * (동의 요청·승인 플로우는 로비 단계에서 추가. 자동 리치 수락은 별도 이벤트가 아니라 현재 미탐지).
      */
@@ -269,12 +336,13 @@ public class GameService {
 
         List<GameEventEntity> live = events.findByGameIdAndUndoneByIsNullOrderBySeqDesc(gameId);
         GameEventEntity target = live.stream()
-                .filter(e -> playerId.equals(e.getActor()) && e.getEventType().startsWith("ACTION_"))
+                .filter(e -> isSeatOf(e.getActor(), playerId)
+                        && (e.getEventType().startsWith("ACTION_") || e.getEventType().equals("FREE_ACTION_CONVERTED")))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("되돌릴 액션이 없습니다"));
         if ("CONSENT".equals(policy)) {
             boolean opponentResponded = live.stream().anyMatch(e ->
-                    e.getSeq() > target.getSeq() && e.getActor() != null && !playerId.equals(e.getActor()));
+                    e.getSeq() > target.getSeq() && e.getActor() != null && !isSeatOf(e.getActor(), playerId));
             if (opponentResponded) {
                 throw new EngineException("상대 응답 이후의 언두는 동의가 필요합니다");
             }
@@ -319,11 +387,15 @@ public class GameService {
         return codec.read(snapshot.getState());
     }
 
+    /** 상태 스냅샷 + 수입/최종 점수 미리보기 — FE state 조회의 표준 응답 */
     @Transactional(readOnly = true)
     public String loadLatestStateJson(UUID gameId) {
-        return snapshots.findFirstByGameIdOrderBySeqDesc(gameId)
-                .orElseThrow(() -> new IllegalArgumentException("스냅샷 없음: " + gameId))
-                .getState();
+        GameState state = loadLatestState(gameId);
+        tools.jackson.databind.node.ObjectNode node =
+                (tools.jackson.databind.node.ObjectNode) codec.toTree(state);
+        node.set("incomePreview", codec.toTree(engine.incomePreview(state)));
+        node.set("finalScorePreview", codec.toTree(engine.finalScorePreview(state)));
+        return node.toString();
     }
 
     /** 리플레이·관전용 이벤트 로그 — undoneBy가 있는 행은 무효 구간(FE가 필터·표시) */
@@ -353,10 +425,38 @@ public class GameService {
                 .build());
     }
 
+    /** 로컬 모드 좌석 id("유저UUID#N") 포함 — 이 엔진 playerId가 해당 유저의 좌석인가 */
+    static boolean isSeatOf(String enginePlayerId, String userId) {
+        return enginePlayerId != null
+                && (enginePlayerId.equals(userId) || enginePlayerId.startsWith(userId + "#"));
+    }
+
+    /** 로컬 모드: 방장(참가자) 세션의 제출을 현재 결정 대기 좌석으로 귀속 */
+    private GameEngine.Submit localModeSubmit(UUID gameId, GameState state, GameEngine.Submit submit) {
+        UUID userId;
+        try {
+            userId = UUID.fromString(submit.playerId());
+        } catch (IllegalArgumentException e) {
+            return submit; // 이미 좌석 id — 내부 호출(리치 타이머 등)
+        }
+        if (players.findById(new GamePlayerEntity.Key(gameId, userId)).isEmpty()) {
+            throw new EngineException("게임 참가자가 아닙니다");
+        }
+        Decision top = state.topDecision();
+        String seat = top != null ? top.getTarget() : state.getActivePlayer();
+        return new GameEngine.Submit(seat, submit.type(), submit.decisionId(), submit.payload());
+    }
+
     @SuppressWarnings("unchecked")
     private void syncPlayerFaction(UUID gameId, EngineEvent event) {
         Map<String, Object> effects = (Map<String, Object>) event.payload().get("effects");
-        players.findById(new GamePlayerEntity.Key(gameId, UUID.fromString(event.actor())))
+        UUID actorId;
+        try {
+            actorId = UUID.fromString(event.actor());
+        } catch (IllegalArgumentException e) {
+            return; // 로컬 모드 좌석 id — game_player 행 없음
+        }
+        players.findById(new GamePlayerEntity.Key(gameId, actorId))
                 .ifPresent(row -> {
                     row.setFaction((String) effects.get("faction"));
                     row.setSeatNo(((Number) effects.get("seatNo")).shortValue());
@@ -401,8 +501,10 @@ public class GameService {
     }
 
     private UserSettingsEntity settingsOf(String enginePlayerId) {
+        int idx = enginePlayerId.indexOf('#');
+        String base = idx > 0 ? enginePlayerId.substring(0, idx) : enginePlayerId; // 로컬 모드 좌석 → 방장 설정
         try {
-            return userSettings.findById(UUID.fromString(enginePlayerId)).orElse(null);
+            return userSettings.findById(UUID.fromString(base)).orElse(null);
         } catch (IllegalArgumentException e) {
             return null; // 엔진 테스트용 비 UUID id — 설정 없음 취급
         }
@@ -412,12 +514,20 @@ public class GameService {
         UUID gameId = game.getId();
         Object timer = codec.readMap(game.getOptions()).get("leechTimerSeconds");
         pendingDecisions.deleteByGameId(gameId);
+        // 리치는 동시 응답 — 스택 상단의 연속된 LEECH_RESPONSE 블록 전체가 "응답 가능" 상태
+        java.util.Set<String> openLeech = new java.util.HashSet<>();
+        for (int i = state.getDecisionStack().size() - 1; i >= 0; i--) {
+            Decision d = state.getDecisionStack().get(i);
+            if (!"LEECH_RESPONSE".equals(d.getType())) {
+                break;
+            }
+            openLeech.add(d.getId());
+        }
         int order = 0;
         for (Decision decision : state.getDecisionStack()) {
-            // ③ 응답 타이머: 현재 응답 가능한(최상단) 리치 오퍼에만 마감 부여
+            // ③ 응답 타이머: 응답 가능한 리치 오퍼 전체에 마감 부여
             boolean timed = timer instanceof Number seconds
-                    && decision == state.topDecision()
-                    && "LEECH_RESPONSE".equals(decision.getType());
+                    && openLeech.contains(decision.getId());
             pendingDecisions.save(GamePendingDecisionEntity.builder()
                     .gameId(gameId)
                     .decisionId(decision.getId())

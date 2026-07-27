@@ -93,8 +93,9 @@ public class GameController {
 
     @GetMapping("/{gameId}/chat")
     public List<ChatService.ChatView> chatHistory(@PathVariable UUID gameId,
-                                                  @RequestParam(defaultValue = "0") long afterSeq) {
-        return chat.history(gameId, afterSeq);
+                                                  @RequestParam(defaultValue = "0") long afterSeq,
+                                                  Authentication auth) {
+        return chat.history(gameId, currentUserId(auth), afterSeq);
     }
 
     private UUID currentUserId(Authentication auth) {

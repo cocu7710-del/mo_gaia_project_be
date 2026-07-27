@@ -26,6 +26,8 @@ public class PlayerState {
     /** MINE/TRADING_STATION/RESEARCH_LAB/PLANETARY_INSTITUTE/ACADEMY/GAIAFORMER → 남은 재고 */
     private Map<String, Integer> stock = new HashMap<>();
     private List<String> techTiles = new ArrayList<>();
+    /** 모웨이드·팅커로이드 3삽 행성 (셋업 배정: 상대 기본 모행성 + 랜덤, 공개 정보) */
+    private List<String> threeShovelPlanets = new ArrayList<>();
     /** 고급 타일에 덮인 기본 타일 (효과 비활성) */
     private List<String> coveredTechTiles = new ArrayList<>();
     private List<String> federationTokens = new ArrayList<>();
@@ -50,6 +52,10 @@ public class PlayerState {
     private String tinkeroidsCurrentAction;
     /** 종족 비딩값 — 최종 점수에서 차감 (decision-flows §4) */
     private int bidVp;
+    /** 최종 순위 (1~4, 게임 종료 시 확정 — 동률이면 비딩값 적은 쪽 승리, 0=미확정) */
+    private int finalRank;
+    /** VP 카테고리별 분해 — 합계는 항상 vp와 일치 (점수 팝업·종료 상세의 데이터) */
+    private Map<String, Integer> vpBreakdown = new HashMap<>();
 
     public int track(String name) {
         return tracks.getOrDefault(name, 0);

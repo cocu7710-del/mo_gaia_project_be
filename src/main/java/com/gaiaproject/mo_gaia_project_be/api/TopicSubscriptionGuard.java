@@ -15,8 +15,9 @@ import java.security.Principal;
 import java.util.UUID;
 
 /**
- * STOMP 구독 가드 — /topic/game/{id}는 게임 참가자만, 그 외 토픽은 인증만 요구.
- * (관전 모드가 생기면 게임 토픽 정책을 완화한다)
+ * STOMP 구독 가드 — 관전 허용(game-spec 12-6):
+ * 게임 이벤트 토픽(/topic/game/{id})은 인증만 요구(관전자 포함),
+ * 채팅 토픽(/topic/game/{id}/chat)은 참가자만 (관전자는 채팅 열람 불가).
  */
 @Component
 public class TopicSubscriptionGuard implements ChannelInterceptor {
@@ -40,13 +41,13 @@ public class TopicSubscriptionGuard implements ChannelInterceptor {
             throw new IllegalArgumentException("인증되지 않은 구독입니다");
         }
         String destination = accessor.getDestination();
-        if (destination != null && destination.startsWith("/topic/game/")) {
+        if (destination != null && destination.startsWith("/topic/game/") && destination.endsWith("/chat")) {
             UUID gameId = UUID.fromString(destination.substring("/topic/game/".length()).split("/")[0]);
             UUID userId = users.findByEmail(user.getName())
                     .map(UserAccountEntity::getId)
                     .orElseThrow(() -> new IllegalArgumentException("세션 계정 없음"));
             if (players.findById(new GamePlayerEntity.Key(gameId, userId)).isEmpty()) {
-                throw new IllegalArgumentException("게임 참가자만 구독할 수 있습니다");
+                throw new IllegalArgumentException("채팅은 게임 참가자만 구독할 수 있습니다");
             }
         }
         return message;

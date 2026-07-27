@@ -79,7 +79,7 @@ public class AuthController {
         context.setAuthentication(auth);
         SecurityContextHolder.setContext(context);
         contextRepository.saveContext(context, request, response); // 세션에 저장 → JSESSIONID 발급
-        return me(auth);
+        return userView(auth.getName());
     }
 
     @PostMapping("/logout")
@@ -92,9 +92,17 @@ public class AuthController {
         return Map.of("status", "ok");
     }
 
+    /** 세션 확인 — 비로그인이면 401 (permitAll 경로라 auth가 null일 수 있음) */
     @GetMapping("/me")
-    public UserView me(Authentication auth) {
-        UserAccountEntity user = users.findByEmail(auth.getName())
+    public ResponseEntity<UserView> me(Authentication auth) {
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(userView(auth.getName()));
+    }
+
+    private UserView userView(String email) {
+        UserAccountEntity user = users.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("세션 계정 없음"));
         return new UserView(user.getId(), user.getEmail(), user.getNickname());
     }

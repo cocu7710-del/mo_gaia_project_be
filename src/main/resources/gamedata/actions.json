@@ -1,28 +1,28 @@
 {
   "_doc": "공용 파워 액션 + Lost Fleet 함대 액션 + 인공물 (docs/data/tiles-scoring.md 확정본). 파워/함대 액션은 라운드당 게임 전체 1회.",
   "powerActions": [
-    { "id": "PWR_KNOWLEDGE",   "cost": { "power": 7 }, "gain": { "knowledge": 3 } },
-    { "id": "PWR_TERRAFORM_2", "cost": { "power": 5 }, "special": "BUILD_MINE_TERRAFORM_2_FREE" },
-    { "id": "PWR_ORE",         "cost": { "power": 4 }, "gain": { "ore": 2 } },
-    { "id": "PWR_CREDIT",      "cost": { "power": 4 }, "gain": { "credits": 7 } },
-    { "id": "PWR_KNOWLEDGE_2", "cost": { "power": 4 }, "gain": { "knowledge": 2 } },
-    { "id": "PWR_TERRAFORM",   "cost": { "power": 3 }, "special": "BUILD_MINE_TERRAFORM_1_FREE" },
-    { "id": "PWR_TOKEN",       "cost": { "power": 3 }, "gain": { "powerTokens": 2 } }
+    { "id": "PWR_KNOWLEDGE",   "desc": "3k",             "cost": { "power": 7 }, "gain": { "knowledge": 3 } },
+    { "id": "PWR_TERRAFORM_2", "desc": "삽2 광산 건설",  "cost": { "power": 5 }, "special": "BUILD_MINE_TERRAFORM_2_FREE" },
+    { "id": "PWR_ORE",         "desc": "2o",             "cost": { "power": 4 }, "gain": { "ore": 2 } },
+    { "id": "PWR_CREDIT",      "desc": "7c",             "cost": { "power": 4 }, "gain": { "credits": 7 } },
+    { "id": "PWR_KNOWLEDGE_2", "desc": "2k",             "cost": { "power": 4 }, "gain": { "knowledge": 2 } },
+    { "id": "PWR_TERRAFORM",   "desc": "삽1 광산 건설",  "cost": { "power": 3 }, "special": "BUILD_MINE_TERRAFORM_1_FREE" },
+    { "id": "PWR_TOKEN",       "desc": "2토큰",          "cost": { "power": 3 }, "gain": { "powerTokens": 2 } }
   ],
   "fleetActions": [
-    { "id": "TF_MARS_VP",        "ship": "TF_MARS",   "cost": { "qic": 2 },                "special": "VP_2_PLUS_1_PER_TECH_TILE", "qicAction": true },
-    { "id": "TF_MARS_GAIAFORM",  "ship": "TF_MARS",   "cost": { "power": 2 },              "special": "INSTANT_GAIAFORM" },
-    { "id": "TF_MARS_TERRAFORM", "ship": "TF_MARS",   "cost": { "credits": 3 },            "special": "BUILD_MINE_TERRAFORM_1_FREE" },
-    { "id": "ECLIPSE_VP",        "ship": "ECLIPSE",   "cost": { "qic": 2 },                "special": "VP_2_PLUS_1_PER_PLANET_TYPE", "qicAction": true },
-    { "id": "ECLIPSE_TECH",      "ship": "ECLIPSE",   "cost": { "power": 3, "knowledge": 2 }, "special": "ADVANCE_TRACK_1" },
-    { "id": "ECLIPSE_MINE",      "ship": "ECLIPSE",   "cost": { "credits": 6 },            "special": "BUILD_MINE_ON_ASTEROIDS" },
-    { "id": "REBELLION_TECH",    "ship": "REBELLION", "cost": { "qic": 3 },                "special": "GAIN_BASIC_TECH_TILE", "qicAction": true },
-    { "id": "REBELLION_UPGRADE", "ship": "REBELLION", "cost": { "power": 3, "ore": 1 },    "special": "UPGRADE_MINE_TO_TS" },
-    { "id": "REBELLION_CONVERT", "ship": "REBELLION", "cost": { "knowledge": 2 },          "gain": { "qic": 1, "credits": 2 } },
-    { "id": "TWILIGHT_FED",      "ship": "TWILIGHT",  "cost": { "qic": 3 },                "special": "REUSE_FEDERATION_TOKEN", "qicAction": true },
-    { "id": "TWILIGHT_UPGRADE",  "ship": "TWILIGHT",  "cost": { "power": 3, "ore": 2 },    "special": "UPGRADE_TS_TO_LAB_WITH_TECH_TILE" },
-    { "id": "TWILIGHT_NAV",      "ship": "TWILIGHT",  "cost": { "knowledge": 1 },          "special": "BUILD_MINE_RANGE_PLUS_3" },
-    { "id": "TWILIGHT_ARTIFACT", "ship": "TWILIGHT",  "cost": { "burnTokens": 6 },         "special": "ACQUIRE_ARTIFACT" }
+    { "id": "TF_MARS_VP",        "ship": "TF_MARS",   "desc": "2vp + 기술타일당 1vp",        "cost": { "qic": 2 },                "special": "VP_2_PLUS_1_PER_TECH_TILE", "qicAction": true },
+    { "id": "TF_MARS_GAIAFORM",  "ship": "TF_MARS",   "desc": "즉시 가이아포밍",             "cost": { "power": 2 },              "special": "INSTANT_GAIAFORM" },
+    { "id": "TF_MARS_TERRAFORM", "ship": "TF_MARS",   "desc": "삽1 광산 건설",               "cost": { "credits": 3 },            "special": "BUILD_MINE_TERRAFORM_1_FREE" },
+    { "id": "ECLIPSE_VP",        "ship": "ECLIPSE",   "desc": "2vp + 행성 종류당 1vp",       "cost": { "qic": 2 },                "special": "VP_2_PLUS_1_PER_PLANET_TYPE", "qicAction": true },
+    { "id": "ECLIPSE_TECH",      "ship": "ECLIPSE",   "desc": "트랙 1칸 전진",               "cost": { "power": 3, "knowledge": 2 }, "special": "ADVANCE_TRACK_1" },
+    { "id": "ECLIPSE_MINE",      "ship": "ECLIPSE",   "desc": "소행성 무료 광산(포머 불필요)", "cost": { "credits": 6 },            "special": "BUILD_MINE_ON_ASTEROIDS" },
+    { "id": "REBELLION_TECH",    "ship": "REBELLION", "desc": "기술타일 획득",               "cost": { "qic": 3 },                "special": "GAIN_TECH_TILE", "qicAction": true },
+    { "id": "REBELLION_UPGRADE", "ship": "REBELLION", "desc": "광산→교역소 업그레이드",      "cost": { "power": 3, "ore": 1 },    "special": "UPGRADE_MINE_TO_TS" },
+    { "id": "REBELLION_CONVERT", "ship": "REBELLION", "desc": "1q + 2c",                     "cost": { "knowledge": 2 },          "gain": { "qic": 1, "credits": 2 } },
+    { "id": "TWILIGHT_FED",      "ship": "TWILIGHT",  "desc": "연방 토큰 보상 재수령",       "cost": { "qic": 3 },                "special": "REUSE_FEDERATION_TOKEN", "qicAction": true },
+    { "id": "TWILIGHT_UPGRADE",  "ship": "TWILIGHT",  "desc": "교역소→연구소 + 기술타일",    "cost": { "power": 3, "ore": 2 },    "special": "UPGRADE_TS_TO_LAB_WITH_TECH_TILE" },
+    { "id": "TWILIGHT_NAV",      "ship": "TWILIGHT",  "desc": "거리 +3 광산 건설",           "cost": { "knowledge": 1 },          "special": "BUILD_MINE_RANGE_PLUS_3" },
+    { "id": "TWILIGHT_ARTIFACT", "ship": "TWILIGHT",  "desc": "인공물 획득",                 "cost": { "burnTokens": 6 },         "special": "ACQUIRE_ARTIFACT" }
   ],
   "fleet": {
     "entryVp": 5,
@@ -30,19 +30,19 @@
     "entryOrderPowerCharge": [0, 2, 2, 3]
   },
   "artifacts": [
-    { "id": "ARTIFACT_1",  "type": "IMMEDIATE", "gain": { "knowledge": 3, "qic": 1 } },
-    { "id": "ARTIFACT_2",  "type": "IMMEDIATE", "gain": { "credits": 5, "ore": 2 } },
-    { "id": "ARTIFACT_3",  "type": "IMMEDIATE", "gain": { "credits": 3, "ore": 3 } },
-    { "id": "ARTIFACT_4",  "type": "INCOME",    "income": { "powerTokensBowl3": 2 } },
-    { "id": "ARTIFACT_5",  "type": "INCOME",    "income": { "ore": 1, "knowledge": 1 } },
-    { "id": "ARTIFACT_6",  "type": "IMMEDIATE", "special": "VP_3_PER_DEEP_SECTOR_WITH_BUILDING" },
-    { "id": "ARTIFACT_7",  "type": "IMMEDIATE", "special": "VP_7_ASTEROIDS_AS_PLANET_TYPE_BUILDING_PLUS_1" },
-    { "id": "ARTIFACT_8",  "type": "IMMEDIATE", "special": "VP_7_TRANSCENDENT_AS_PLANET_TYPE_BUILDING_PLUS_1" },
-    { "id": "ARTIFACT_9",  "type": "IMMEDIATE", "special": "VP_3_PER_SCIENCE_LEVEL" },
-    { "id": "ARTIFACT_10", "type": "IMMEDIATE", "special": "VP_3_PER_GAIA_LEVEL" },
-    { "id": "ARTIFACT_11", "type": "IMMEDIATE", "special": "VP_3_PER_TRACK_LEVEL3_PLUS" },
-    { "id": "ARTIFACT_12", "type": "IMMEDIATE", "special": "VP_3_PLUS_1_PER_PLANET_TYPE" },
-    { "id": "ARTIFACT_13", "type": "SPECIAL",   "special": "FEDERATION_TOKEN_DOUBLE_USE" }
+    { "id": "ARTIFACT_1",  "type": "IMMEDIATE", "desc": "3k + 1q",                        "gain": { "knowledge": 3, "qic": 1 } },
+    { "id": "ARTIFACT_2",  "type": "IMMEDIATE", "desc": "5c + 2o",                        "gain": { "credits": 5, "ore": 2 } },
+    { "id": "ARTIFACT_3",  "type": "IMMEDIATE", "desc": "3c + 3o",                        "gain": { "credits": 3, "ore": 3 } },
+    { "id": "ARTIFACT_4",  "type": "INCOME",    "desc": "3구역 2토큰 수입",               "income": { "powerTokensBowl3": 2 } },
+    { "id": "ARTIFACT_5",  "type": "INCOME",    "desc": "1o + 1k 수입",                   "income": { "ore": 1, "knowledge": 1 } },
+    { "id": "ARTIFACT_6",  "type": "IMMEDIATE", "desc": "건물 있는 깊은 구역당 3vp",      "special": "VP_3_PER_DEEP_SECTOR_WITH_BUILDING" },
+    { "id": "ARTIFACT_7",  "type": "IMMEDIATE", "desc": "7vp + 소행성=행성종류·광산 카운트",     "special": "VP_7_ASTEROIDS_AS_PLANET_TYPE_BUILDING_PLUS_1" },
+    { "id": "ARTIFACT_8",  "type": "IMMEDIATE", "desc": "7vp + 초월차원=행성종류·광산 카운트",   "special": "VP_7_TRANSCENDENT_AS_PLANET_TYPE_BUILDING_PLUS_1" },
+    { "id": "ARTIFACT_9",  "type": "IMMEDIATE", "desc": "지식 트랙 레벨당 3vp",           "special": "VP_3_PER_SCIENCE_LEVEL" },
+    { "id": "ARTIFACT_10", "type": "IMMEDIATE", "desc": "가이아 트랙 레벨당 3vp",         "special": "VP_3_PER_GAIA_LEVEL" },
+    { "id": "ARTIFACT_11", "type": "IMMEDIATE", "desc": "레벨3+ 트랙당 3vp",              "special": "VP_3_PER_TRACK_LEVEL3_PLUS" },
+    { "id": "ARTIFACT_12", "type": "IMMEDIATE", "desc": "3vp + 행성 종류당 1vp",          "special": "VP_3_PLUS_1_PER_PLANET_TYPE" },
+    { "id": "ARTIFACT_13", "type": "SPECIAL",   "desc": "연방 토큰 보상 재수령",          "special": "FEDERATION_TOKEN_DOUBLE_USE" }
   ],
   "artifactSetup": { "drawCount": 4, "acquireCost": { "burnTokens": 6 } }
 }

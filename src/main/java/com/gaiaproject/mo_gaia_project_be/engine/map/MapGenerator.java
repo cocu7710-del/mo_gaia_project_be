@@ -6,19 +6,17 @@ import com.gaiaproject.mo_gaia_project_be.engine.rules.GameData;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 
 /**
  * 맵 생성기 (docs/data/map.md 알고리즘, 4인 전용).
  * 1. 기본 섹터: SECTOR_1~4 중 2개 → 중앙(5,6), 나머지 8개 셔플 → {1,2,3,4,7,8,9,10}, 회전 랜덤
  * 2. 충돌 해소: 같은 행성 타입(차원 변형 제외)이 타 섹터와 거리 ≤1이면 60°씩 회전 (최대 6회)
  * 3. 딥 섹터: 8개 전부, FRONT/BACK 랜덤, 셔플 → 11~18 (회전 고정)
- * 4. 1헥스 타일: 함대 4척은 인접 그래프 배제 배치, 나머지 6개 랜덤
+ * 4. 1헥스 타일: 함대 4척은 서로 3칸 이내에 오지 않게(헥스 거리 4 이상) 배치, 나머지 6개 랜덤
  * 5. 글로벌 헥스 생성 (겹침 시 예외)
  *
  * seed가 같으면 항상 같은 맵 — 결과는 MAP_GENERATED 이벤트 payload로 기록되어 재생 시 재추첨하지 않는다.
@@ -168,12 +166,6 @@ public class MapGenerator {
             }
         }
 
-        Set<String> adjacency = new HashSet<>();
-        for (JsonNode pair : sectorsJson.get("fleetAdjacency")) {
-            adjacency.add(pair.get(0).asInt() + "-" + pair.get(1).asInt());
-            adjacency.add(pair.get(1).asInt() + "-" + pair.get(0).asInt());
-        }
-
         List<Integer> positions = new ArrayList<>();
         for (JsonNode pos : sectorsJson.get("positions").get("single")) {
             positions.add(pos.get("positionNo").asInt());
@@ -183,7 +175,7 @@ public class MapGenerator {
             List<Integer> shuffled = new ArrayList<>(positions);
             Collections.shuffle(shuffled, rng);
             List<Integer> fleetPositions = shuffled.subList(0, fleetIds.size());
-            if (fleetPositionsValid(fleetPositions, adjacency)) {
+            if (fleetPositionsValid(sectorsJson, fleetPositions)) {
                 Collections.shuffle(fleetIds, rng);
                 Collections.shuffle(otherIds, rng);
                 List<SingleHexPlacement> placements = new ArrayList<>();
@@ -198,13 +190,16 @@ public class MapGenerator {
                 return placements;
             }
         }
-        throw new IllegalStateException("함대 타일 배치 실패 (인접 제약을 만족하는 배치를 찾지 못함)");
+        throw new IllegalStateException("함대 타일 배치 실패 (거리 제약을 만족하는 배치를 찾지 못함)");
     }
 
-    private boolean fleetPositionsValid(List<Integer> fleetPositions, Set<String> adjacency) {
+    /** 함대끼리 서로 3칸 이내(헥스 거리 ≤3)에 있으면 무효 — 최소 거리 4 강제 */
+    private boolean fleetPositionsValid(JsonNode sectorsJson, List<Integer> fleetPositions) {
         for (int i = 0; i < fleetPositions.size(); i++) {
             for (int j = i + 1; j < fleetPositions.size(); j++) {
-                if (adjacency.contains(fleetPositions.get(i) + "-" + fleetPositions.get(j))) {
+                HexCoord a = positionOffset(sectorsJson, "single", fleetPositions.get(i));
+                HexCoord b = positionOffset(sectorsJson, "single", fleetPositions.get(j));
+                if (a.distance(b) <= 3) {
                     return false;
                 }
             }

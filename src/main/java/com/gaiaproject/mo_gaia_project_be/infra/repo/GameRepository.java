@@ -20,4 +20,24 @@ public interface GameRepository extends JpaRepository<GameEntity, UUID> {
 
     /** 로비 방 목록 (status=WAITING) */
     List<GameEntity> findByStatusOrderByCreatedAtDesc(String status);
+
+    /** 내가 참가 중인 진행 게임 (로비 진행중 탭) */
+    @Query("""
+            select g from GameEntity g
+            where g.status in ('SETUP', 'PLAYING')
+              and exists (select 1 from GamePlayerEntity p
+                          where p.gameId = g.id and p.userId = :userId)
+            order by g.createdAt desc
+            """)
+    List<GameEntity> findOngoingByUserId(@Param("userId") UUID userId);
+
+    /** 내가 참가하지 않은 진행 게임 (관전 탭) */
+    @Query("""
+            select g from GameEntity g
+            where g.status in ('SETUP', 'PLAYING')
+              and not exists (select 1 from GamePlayerEntity p
+                              where p.gameId = g.id and p.userId = :userId)
+            order by g.createdAt desc
+            """)
+    List<GameEntity> findOngoingExcludingUser(@Param("userId") UUID userId);
 }

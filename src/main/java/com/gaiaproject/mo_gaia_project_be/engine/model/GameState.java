@@ -14,6 +14,8 @@ import java.util.Map;
 @Data
 public class GameState {
     private long version;
+    /** 셋업 시드 — 셋업 이후 파생 랜덤(3삽 행성 배정 등)의 결정성 보장 */
+    private long rngSeed;
     /** SETUP_BID / SETUP_MINES / SETUP_BOOSTER / PLAYING / FINISHED */
     private String phase;
     private int round;
@@ -24,8 +26,6 @@ public class GameState {
     private int nextDecisionNo = 1;
     /** 메인 액션 진행 중 — 결정 스택이 비면 턴을 넘긴다 */
     private boolean turnEndPending;
-    /** 라운드 종료 대기 — 아이타 가이아 페이즈 결정 해소 후 라운드 마감을 재개한다 (edge-cases §7) */
-    private boolean roundEndPending;
     /** "q,r" → 헥스 */
     private Map<String, HexState> hexes = new LinkedHashMap<>();
     private List<Map<String, Object>> sectorPlacements = new ArrayList<>();

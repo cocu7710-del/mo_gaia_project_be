@@ -23,7 +23,8 @@
 
 | 문서 | 내용 | 상태 |
 |------|------|------|
-| [rules/decision-flows.md](rules/decision-flows.md) | 액션별 결정 연쇄 표 (어떤 효과가 어떤 결정을 push하는가) | **초안 완료** (검수 대기) |
+| [rules/rule-audit.md](rules/rule-audit.md) | **룰 전수 재검수 체크리스트** — 사용자 ✅ 판정만 확정으로 인정. 다른 문서의 "확정"보다 우선 | **진행 중** (A. 셋업 검수 대기) |
+| [rules/decision-flows.md](rules/decision-flows.md) | 액션별 결정 연쇄 표 (어떤 효과가 어떤 결정을 push하는가) | **초안 완료** (rule-audit로 재검수 중) |
 | [rules/edge-cases.md](rules/edge-cases.md) | v1 버그 지점 룰 확정 (브레인 스톤, 연방 선언, 고급 타일 등) | **확정 완료** |
 | [design/domain-model.md](design/domain-model.md) | 새 도메인 모델·테이블 설계 (이벤트 소싱, 엔진 구조) | **초안 완료** (검수 대기) |
 

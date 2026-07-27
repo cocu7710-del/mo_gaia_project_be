@@ -11,4 +11,6 @@ public interface GameEventRepository extends JpaRepository<GameEventEntity, Game
     List<GameEventEntity> findByGameIdAndSeqGreaterThanEqualOrderBySeq(UUID gameId, long fromSeq);
 
     List<GameEventEntity> findByGameIdAndUndoneByIsNullOrderBySeqDesc(UUID gameId);
+
+    void deleteByGameId(UUID gameId);
 }

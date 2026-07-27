@@ -2,6 +2,7 @@ package com.gaiaproject.mo_gaia_project_be.application;
 
 import com.gaiaproject.mo_gaia_project_be.engine.model.GameState;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Map;
@@ -27,5 +28,9 @@ public class GameStateCodec {
     @SuppressWarnings("unchecked")
     public Map<String, Object> readMap(String json) {
         return mapper.readValue(json, Map.class);
+    }
+
+    public JsonNode toTree(Object value) {
+        return mapper.valueToTree(value);
     }
 }

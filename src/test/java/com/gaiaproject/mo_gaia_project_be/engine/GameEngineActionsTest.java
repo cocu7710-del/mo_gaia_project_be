@@ -50,6 +50,7 @@ class GameEngineActionsTest {
         assertEquals(6, p1.getKnowledge());
         assertEquals(1, p1.track("AI"));
         assertEquals(qicBefore + 1, p1.getQic()); // AI 레벨 1 보상
+        EngineTestSupport.endTurn(engine, state);
         assertEquals("p2", state.getActivePlayer());
     }
 

@@ -35,6 +35,10 @@ public class GamePlayerEntity {
     @Column(name = "bid_vp", nullable = false)
     private short bidVp;
 
+    /** 대기 방 준비 상태 (시작 후에는 의미 없음) */
+    @Column(nullable = false)
+    private boolean ready;
+
     @Column(name = "final_score")
     private Integer finalScore;
 

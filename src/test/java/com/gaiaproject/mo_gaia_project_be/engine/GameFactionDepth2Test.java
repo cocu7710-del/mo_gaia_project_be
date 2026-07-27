@@ -51,6 +51,7 @@ class GameFactionDepth2Test {
             engine.apply(state, new GameEngine.Submit(top.getTarget(), "TINKEROIDS_ACTION_PICK", top.getId(),
                     Map.of("tile", "TINK_QIC_1")));
         }
+        EngineTestSupport.resolveRoundStartDecisions(engine, state); // 능력 선택 아래 깔린 수입 결정 해소
         return state;
     }
 
@@ -109,10 +110,53 @@ class GameFactionDepth2Test {
                 Map.of("source", "FACTION", "id", "PI_ACTION_ATTACH_RING", "hexQ", 1, "hexR", 0)));
         assertTrue(state.getHexes().get("1,0").isRing());
 
+        state.setTurnEndPending(false); // 자유 행동 구간 종료 처리 (테스트 편의)
         state.setActivePlayer("p2");
         engine.apply(state, new GameEngine.Submit("p2", "ACTION_FORM_FEDERATION", null,
                 Map.of("buildings", keys, "satellites", List.of()))); // 3+3+1 = 7 ✓
         assertEquals("CHOOSE_FEDERATION_TILE", state.topDecision().getType());
+    }
+
+    @Test
+    void 위성은_타인_위성이나_우주정거장_헥스에도_배치되고_미입장_함대_연방_타일은_거부된다() {
+        GameState state = depthGame();
+        PlayerState p1 = state.player("p1");
+        state.setActivePlayer("p1");
+
+        // 파워 7 클러스터: (0,0) PI 3 — (2,0) 연구소 2 — (4,0) 교역소 2, 위성 (1,0)·(3,0)으로 연결
+        String[][] buildings = {{"0,0", "PLANETARY_INSTITUTE"}, {"2,0", "RESEARCH_LAB"}, {"4,0", "TRADING_STATION"}};
+        for (String[] spec : buildings) {
+            HexState hex = state.getHexes().get(spec[0]);
+            hex.setBuildingOwner("p1");
+            hex.setBuildingType(spec[1]);
+        }
+        for (String key : List.of("1,0", "3,0")) {
+            HexState hex = state.getHexes().get(key);
+            hex.setPlanet("EMPTY");
+            hex.setBuildingOwner(null);
+            hex.setBuildingType(null);
+            hex.setShip(null);
+        }
+        state.getHexes().get("1,0").getSatelliteOwners().add("p3");     // 타인 위성 공존 허용
+        state.getHexes().get("3,0").setBuildingOwner("p4");             // 하이브 우주정거장 위 허용
+        state.getHexes().get("3,0").setBuildingType("SPACE_STATION");
+        p1.setBowl1(5);
+
+        engine.apply(state, new GameEngine.Submit("p1", "ACTION_FORM_FEDERATION", null,
+                Map.of("buildings", List.of("0,0", "2,0", "4,0"), "satellites", List.of("1,0", "3,0"))));
+        assertTrue(state.getHexes().get("1,0").getSatelliteOwners().containsAll(List.of("p3", "p1")));
+        assertTrue(state.getHexes().get("3,0").getSatelliteOwners().contains("p1"));
+
+        // 결성 보상: 미입장 함대의 확장 연방 타일은 선택 불가 → 공급처 타일은 가능
+        assertEquals("CHOOSE_FEDERATION_TILE", state.topDecision().getType());
+        String fleetTile = state.getBoard().getFleetFedTiles().get("TF_MARS");
+        assertThrows(EngineException.class, () -> engine.apply(state, new GameEngine.Submit(
+                "p1", "CHOOSE_FEDERATION_TILE", state.topDecision().getId(), Map.of("tile", fleetTile))));
+        String supplyTile = state.getBoard().getFederationSupply().entrySet().stream()
+                .filter(e -> e.getValue() > 0).map(Map.Entry::getKey).findFirst().orElseThrow();
+        engine.apply(state, new GameEngine.Submit("p1", "CHOOSE_FEDERATION_TILE",
+                state.topDecision().getId(), Map.of("tile", supplyTile)));
+        assertTrue(p1.getFederationTokens().contains(supplyTile));
     }
 
     @Test
@@ -126,6 +170,7 @@ class GameFactionDepth2Test {
         engine.apply(state, new GameEngine.Submit("p3", "TINKEROIDS_ACTION_PICK", pick.getId(),
                 Map.of("tile", "TINK_POWER_4")));
         assertEquals("TINK_POWER_4", p3.getTinkeroidsCurrentAction());
+        EngineTestSupport.resolveRoundStartDecisions(engine, state); // 잔여 수입 결정 해소
 
         // 사용 (메인 액션)
         state.setActivePlayer("p3");
@@ -195,7 +240,7 @@ class GameFactionDepth2Test {
             hex.setBuildingType(types[i]);
         }
         String redundantSatellite = findHex(state, h -> "EMPTY".equals(h.getPlanet()) && !h.hasBuilding()
-                && h.getShip() == null && h.getSatelliteOwner() == null
+                && h.getShip() == null && h.getSatelliteOwners().isEmpty()
                 && HexCoord.parse("0,0").distance(new HexCoord(0, 0)) == 0
                 && new HexCoord(1, 1).key().equals("1,1"));
         // (1,1)은 클러스터에 인접 — 빼도 연결 유지되므로 불필요

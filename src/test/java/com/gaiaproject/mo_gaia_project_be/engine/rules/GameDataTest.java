@@ -55,6 +55,19 @@ class GameDataTest {
     }
 
     @Test
+    void PI_수입_예외_종족() {
+        // 제노스: 파순4 + QIC1 (토큰 없음) / 글린: 파순4 + 광석1 (토큰 없음)
+        var xenos = data.faction("XENOS").get("piIncome");
+        assertEquals(4, xenos.get("powerCharge").asInt());
+        assertEquals(1, xenos.get("qic").asInt());
+        assertEquals(0, xenos.path("powerToken").asInt(0));
+        var gleens = data.faction("GLEENS").get("piIncome");
+        assertEquals(4, gleens.get("powerCharge").asInt());
+        assertEquals(1, gleens.get("ore").asInt());
+        assertEquals(0, gleens.path("powerToken").asInt(0));
+    }
+
+    @Test
     void 확정값_스팟체크() {
         // start는 기본값 — 트랙 1 보상은 셋업에서 지급 (다카니안 기본 1q + 항해1 보상 → 시작 2q)
         for (var faction : data.factions()) {
@@ -63,6 +76,9 @@ class GameDataTest {
             }
             if (faction.get("id").asText().equals("MOWEIDS")) {
                 assertEquals(5, faction.get("start").get("knowledge").asInt());
+            }
+            if (faction.get("id").asText().equals("SPACE_GIANTS")) {
+                assertEquals(1, faction.get("start").get("qic").asInt()); // 항해1 보상 +1q → 시작 2q
             }
         }
         // 가이아포밍 파워 비용 6/6/4/3/3 (레벨 1~5)

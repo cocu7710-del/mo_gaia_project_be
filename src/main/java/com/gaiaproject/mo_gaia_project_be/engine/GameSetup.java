@@ -11,10 +11,12 @@ import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * 게임 셋업 — 맵 생성, 보드 타일 드로우, 플레이어 초기화(시작 자원 + 시작 트랙 레벨 1 보상 지급),
@@ -34,25 +36,61 @@ public final class GameSetup {
         }
         Random rng = new Random(seed);
         GameState state = new GameState();
+        state.setRngSeed(seed);
         state.setPhase("SETUP_MINES");
         state.setRound(0);
 
         generateMap(data, state, rng.nextLong());
         drawBoard(data, state.getBoard(), rng);
         initPlayers(data, state, seats);
+        assignThreeShovelPlanets(data, state);
         buildSetupQueue(data, state, seats);
         pushNextSetupDecision(state);
 
         return state;
     }
 
+    /** 1인 플레이 + 비딩 없음 — 4종족을 무작위로 뽑아(같은 홈행성 중복 없이) playerIds 순서대로 배정 후 바로 SETUP_MINES */
+    public static GameState createLocalRandom(GameData data, long seed, List<String> playerIds) {
+        if (playerIds.size() != 4) {
+            throw new EngineException("4인 전용 게임입니다 (현재 " + playerIds.size() + "명)");
+        }
+        Random rng = new Random(seed);
+        List<JsonNode> shuffled = new ArrayList<>();
+        for (JsonNode faction : data.factions()) {
+            shuffled.add(faction);
+        }
+        Collections.shuffle(shuffled, rng);
+        Set<String> usedPlanets = new HashSet<>();
+        List<String> pickedFactions = new ArrayList<>();
+        for (JsonNode faction : shuffled) {
+            if (pickedFactions.size() >= playerIds.size()) {
+                break;
+            }
+            if (usedPlanets.add(faction.get("homePlanet").asText())) {
+                pickedFactions.add(faction.get("id").asText());
+            }
+        }
+        List<PlayerSeat> seats = new ArrayList<>();
+        for (int i = 0; i < playerIds.size(); i++) {
+            seats.add(new PlayerSeat(playerIds.get(i), pickedFactions.get(i)));
+        }
+        return create(data, seed, seats);
+    }
+
     /** 비딩 모드 — 종족·턴 순서는 경매로 확정. playerIds = 입장 순서 (1번부터 발언). */
     public static GameState createWithBidding(GameData data, long seed, List<String> playerIds) {
+        return createWithBidding(data, seed, playerIds, false);
+    }
+
+    /** turnPick=true(모드 b): 낙찰자가 종족과 함께 원하는 턴 순번을 직접 선택한다 */
+    public static GameState createWithBidding(GameData data, long seed, List<String> playerIds, boolean turnPick) {
         if (playerIds.size() != 4) {
             throw new EngineException("4인 전용 게임입니다 (현재 " + playerIds.size() + "명)");
         }
         Random rng = new Random(seed);
         GameState state = new GameState();
+        state.setRngSeed(seed);
         state.setPhase("SETUP_BID");
         state.setRound(0);
 
@@ -60,10 +98,27 @@ public final class GameSetup {
         drawBoard(data, state.getBoard(), rng);
 
         BoardState board = state.getBoard();
+        board.setBidTurnPick(turnPick);
         board.getBidUnassigned().addAll(playerIds);
         board.getBidActive().addAll(playerIds);
+        // 비딩 후보 = 인원수만큼 랜덤 4종 — 같은 홈행성(색) 종족 2종은 동시 등장 불가
+        List<JsonNode> shuffled = new ArrayList<>();
         for (JsonNode faction : data.factions()) {
-            board.getFactionPool().add(faction.get("id").asText());
+            shuffled.add(faction);
+        }
+        Collections.shuffle(shuffled, rng);
+        Set<String> usedPlanets = new HashSet<>();
+        for (JsonNode faction : shuffled) {
+            if (board.getFactionPool().size() >= playerIds.size()) {
+                break;
+            }
+            if (usedPlanets.add(faction.get("homePlanet").asText())) {
+                board.getFactionPool().add(faction.get("id").asText());
+            }
+        }
+        if (!turnPick) {
+            // 모드 a: 후보 순서 = 턴 슬롯 고정 (1번 후보 = 1턴 …). 낙찰자는 종족을 고르면 그 턴을 함께 가져간다
+            board.getBidSlotFactions().addAll(board.getFactionPool());
         }
         state.getDecisionStack().add(new Decision(state.newDecisionId(), "BID_FACTION",
                 playerIds.get(0), Map.of("currentBid", 0)));
@@ -78,8 +133,53 @@ public final class GameSetup {
             seats.add(new PlayerSeat(playerId, state.player(playerId).getFaction()));
         }
         state.setPhase("SETUP_MINES");
+        assignThreeShovelPlanets(data, state);
         buildSetupQueue(data, state, seats);
         pushNextSetupDecision(state);
+    }
+
+    /**
+     * 모웨이드·팅커로이드 3삽 행성 배정 (공개 정보):
+     * 상대 기본 종족의 모행성 전부 + 나머지 링 행성 랜덤으로 총 3개.
+     * 두 종족이 함께 있으면 상대 모행성은 공유되지만 랜덤 배정분은 서로 중복되지 않는다.
+     */
+    static void assignThreeShovelPlanets(GameData data, GameState state) {
+        List<String> ring = new ArrayList<>();
+        for (JsonNode planet : data.constants().get("terraformRing")) {
+            ring.add(planet.asText());
+        }
+        Random rng = new Random(state.getRngSeed() ^ 0x35A11L); // 셋업 시드 파생 — 재생 결정성
+        Set<String> randomUsed = new HashSet<>();
+        for (String playerId : state.getTurnOrder()) {
+            PlayerState p = state.player(playerId);
+            JsonNode faction = data.faction(p.getFaction());
+            if (!hasAbility(faction, "TERRAFORM_HOME_3_OTHERS_1") || !p.getThreeShovelPlanets().isEmpty()) {
+                continue;
+            }
+            List<String> assigned = new ArrayList<>();
+            for (String otherId : state.getTurnOrder()) {
+                if (otherId.equals(playerId)) {
+                    continue;
+                }
+                String home = data.faction(state.player(otherId).getFaction()).get("homePlanet").asText();
+                if (ring.contains(home) && !assigned.contains(home)) {
+                    assigned.add(home);
+                }
+            }
+            List<String> rest = new ArrayList<>();
+            for (String planet : ring) {
+                if (!assigned.contains(planet) && !randomUsed.contains(planet)) {
+                    rest.add(planet);
+                }
+            }
+            Collections.shuffle(rest, rng);
+            while (assigned.size() < 3 && !rest.isEmpty()) {
+                String pick = rest.remove(0);
+                assigned.add(pick);
+                randomUsed.add(pick);
+            }
+            p.getThreeShovelPlanets().addAll(assigned);
+        }
     }
 
     // ── 맵 ──────────────────────────────────────
@@ -140,6 +240,12 @@ public final class GameSetup {
         for (int i = 0; i < 3; i++) {
             board.getTechOffers().put("EXPANSION_" + (i + 1), expIds.get(i));
         }
+        // 확장 기술 타일은 함대 3척(TF 마스·이클립스·리벨리온)에 1장씩 연결 — 트와일라잇은 기술 타일 없음.
+        // 타일 배정 랜덤성은 expIds 셔플에서 나온다. 그 함대 입장자만 획득 가능.
+        List<String> techShips = List.of("TF_MARS", "ECLIPSE", "REBELLION");
+        for (int i = 0; i < 3; i++) {
+            board.getExpansionTechShips().put("EXPANSION_" + (i + 1), techShips.get(i));
+        }
 
         // 고급 타일 7장: 트랙 6 + COMMON
         List<String> advDraw = draw(ids(data.tech().get("advancedTiles")), 7, rng);
@@ -168,8 +274,9 @@ public final class GameSetup {
             board.getFederationSupply().put(baseFed.get(i), 3);
         }
         Collections.shuffle(expFed, rng);
+        List<String> ships = List.of("TF_MARS", "ECLIPSE", "REBELLION", "TWILIGHT");
         for (int i = 0; i < 4; i++) {
-            board.getFleetFedTiles().put(String.valueOf(i + 1), expFed.get(i));
+            board.getFleetFedTiles().put(ships.get(i), expFed.get(i));
         }
 
         board.setEconomyOption(rng.nextBoolean() ? "A" : "B");
@@ -212,6 +319,7 @@ public final class GameSetup {
         PlayerState p = new PlayerState();
         p.setFaction(factionId);
         p.setVp(start.get("vp").asInt());
+        p.getVpBreakdown().put("START", start.get("vp").asInt());
         p.setCredits(start.get("credits").asInt());
         p.setOre(start.get("ore").asInt());
         p.setKnowledge(start.get("knowledge").asInt());
@@ -297,43 +405,45 @@ public final class GameSetup {
         return false;
     }
 
-    // ── 초기 배치 큐 (스네이크 1→4→4→1, 종족 변형 반영) ──────────────────────
+    // ── 초기 배치 큐: 기본종족 스네이크(1→4→4→1) → 제노스 3번째 → 확장종족 좌석순 → 하이브(placeLast) ──
 
     private static void buildSetupQueue(GameData data, GameState state, List<PlayerSeat> seats) {
         List<Map<String, String>> queue = state.getBoard().getSetupQueue();
 
-        // 1차: 좌석 순 — 광산 종족은 광산, 팅커로이드(placeLast 아님) 의회
+        List<PlayerSeat> basics = new ArrayList<>();
+        List<PlayerSeat> expansions = new ArrayList<>();
+        List<PlayerSeat> lasts = new ArrayList<>();
         for (PlayerSeat seat : seats) {
-            JsonNode setup = data.faction(seat.faction()).path("setup");
-            if (setup.path("placePiInsteadOfMines").asBoolean(false)) {
-                if (!setup.path("placeLast").asBoolean(false)) {
-                    queue.add(Map.of("player", seat.playerId(), "building", "PLANETARY_INSTITUTE"));
-                }
+            JsonNode faction = data.faction(seat.faction());
+            if (faction.path("setup").path("placeLast").asBoolean(false)) {
+                lasts.add(seat);
+            } else if (faction.path("expansion").asBoolean(false)) {
+                expansions.add(seat);
             } else {
-                queue.add(Map.of("player", seat.playerId(), "building", "MINE"));
+                basics.add(seat);
             }
         }
-        // 2차: 역순 — 광산 2개 이상 종족만
-        for (int i = seats.size() - 1; i >= 0; i--) {
-            PlayerSeat seat = seats.get(i);
-            JsonNode setup = data.faction(seat.faction()).path("setup");
-            int mines = setup.path("initialMines").asInt(2);
-            if (!setup.path("placePiInsteadOfMines").asBoolean(false) && mines >= 2) {
-                queue.add(Map.of("player", seat.playerId(), "building", "MINE"));
-            }
+        // 1) 기본 종족 스네이크: 좌석 순 1번째 광산 → 역순 2번째 광산
+        for (PlayerSeat seat : basics) {
+            queue.add(Map.of("player", seat.playerId(), "building", "MINE"));
         }
-        // 제노스 3번째 광산
-        for (PlayerSeat seat : seats) {
+        for (int i = basics.size() - 1; i >= 0; i--) {
+            queue.add(Map.of("player", basics.get(i).playerId(), "building", "MINE"));
+        }
+        // 2) 제노스 3번째 광산
+        for (PlayerSeat seat : basics) {
             if (data.faction(seat.faction()).path("setup").path("initialMines").asInt(2) >= 3) {
                 queue.add(Map.of("player", seat.playerId(), "building", "MINE"));
             }
         }
-        // 하이브(placeLast): 항상 마지막에 의회
-        for (PlayerSeat seat : seats) {
-            JsonNode setup = data.faction(seat.faction()).path("setup");
-            if (setup.path("placePiInsteadOfMines").asBoolean(false) && setup.path("placeLast").asBoolean(false)) {
-                queue.add(Map.of("player", seat.playerId(), "building", "PLANETARY_INSTITUTE"));
-            }
+        // 3) 확장 종족: 좌석 순 1회씩 (팅커로이드는 의회, 그 외 광산 1개)
+        for (PlayerSeat seat : expansions) {
+            boolean pi = data.faction(seat.faction()).path("setup").path("placePiInsteadOfMines").asBoolean(false);
+            queue.add(Map.of("player", seat.playerId(), "building", pi ? "PLANETARY_INSTITUTE" : "MINE"));
+        }
+        // 4) 하이브(placeLast): 항상 마지막에 의회
+        for (PlayerSeat seat : lasts) {
+            queue.add(Map.of("player", seat.playerId(), "building", "PLANETARY_INSTITUTE"));
         }
     }
 

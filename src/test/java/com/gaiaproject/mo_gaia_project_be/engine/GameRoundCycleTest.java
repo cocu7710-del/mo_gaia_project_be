@@ -122,6 +122,7 @@ class GameRoundCycleTest {
         engine.apply(state, new GameEngine.Submit("p1", "ACTION_GAIAFORM", null,
                 Map.of("hexQ", target.q(), "hexR", target.r(), "qicForRange", qic)));
         assertEquals(6, p1.getGaiaPower());
+        EngineTestSupport.endTurn(engine, state); // 자유 행동 구간 닫기 (§7.10)
 
         passAll(state);
         resolveIncomeDecisions(state);
@@ -163,5 +164,12 @@ class GameRoundCycleTest {
         int p2Gain = state.player("p2").getVp() - p2Before;
         assertTrue(p1Gain > 0);
         assertTrue(p1Gain > p2Gain); // 건물 1위(18VP)가 반영됨
+
+        // VP 분해 불변식: 카테고리 합계 = 총점 (점수 팝업 데이터 무결성)
+        for (String pid : state.getTurnOrder()) {
+            PlayerState p = state.player(pid);
+            int sum = p.getVpBreakdown().values().stream().mapToInt(Integer::intValue).sum();
+            assertEquals(p.getVp(), sum, pid + " vpBreakdown 합계 불일치");
+        }
     }
 }

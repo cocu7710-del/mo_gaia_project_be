@@ -47,10 +47,41 @@ final class EngineTestSupport {
         }
     }
 
-    /** 초기 광산 배치 + 부스터 선택까지 완료 → PLAYING */
+    /** 초기 광산 배치 + 부스터 선택 + 1라운드 수입 결정 해소까지 완료 → PLAYING */
     static void completeSetup(GameEngine engine, GameData data, GameState state) {
         playAllInitialMines(engine, data, state);
         pickAllBoosters(engine, state);
+        resolveRoundStartDecisions(engine, state);
+    }
+
+    /** 라운드 시작의 수입 파워 순서 결정을 기본값으로 해소 (팅커로이드 타일 선택 등은 테스트가 직접 처리) */
+    static void resolveRoundStartDecisions(GameEngine engine, GameState state) {
+        while (!state.getDecisionStack().isEmpty()
+                && "INCOME_POWER_ORDER".equals(state.topDecision().getType())) {
+            Decision top = state.topDecision();
+            engine.apply(state, new GameEngine.Submit(
+                    top.getTarget(), "INCOME_POWER_ORDER", top.getId(), Map.of("order", "TOKENS_FIRST")));
+        }
+    }
+
+    /** 함대 우주선 헥스 좌표 */
+    static HexCoord shipCoord(GameState state, String ship) {
+        return HexCoord.parse(state.getHexes().entrySet().stream()
+                .filter(e -> ship.equals(e.getValue().getShip()))
+                .map(Map.Entry::getKey).findFirst().orElseThrow());
+    }
+
+    /** 함대 입장 — 거리 QIC 자동 계산·충전 (game-spec 7.7-2) */
+    static void enterFleet(GameEngine engine, GameState state, String playerId, String ship) {
+        int qic = qicForRange(state, playerId, shipCoord(state, ship), 1);
+        state.player(playerId).setQic(Math.max(state.player(playerId).getQic(), qic));
+        engine.apply(state, new GameEngine.Submit(playerId, "ACTION_FLEET_ENTER", null,
+                Map.of("ship", ship, "qicForRange", qic)));
+    }
+
+    /** 명시적 턴 종료 (자유 행동 구간 닫기 — game-spec §7.10) */
+    static void endTurn(GameEngine engine, GameState state) {
+        engine.apply(state, new GameEngine.Submit(state.getActivePlayer(), "END_TURN", null, Map.of()));
     }
 
     /** 스택 최상단이 리치인 동안 전부 거절 처리 */

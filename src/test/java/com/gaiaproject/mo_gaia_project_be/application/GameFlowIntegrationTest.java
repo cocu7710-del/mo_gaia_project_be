@@ -97,11 +97,22 @@ class GameFlowIntegrationTest {
         assertThrows(GameService.VersionConflictException.class, () -> service.submit(gameId,
                 new GameEngine.Submit(p1, "ACTION_PASS", null, Map.of()), 1L));
 
+        // 자유 변환 → 언두: FREE_ACTION_CONVERTED가 개별 롤백 대상이어야 한다 (이전 액션으로 건너뛰면 안 됨)
+        int oreBefore = state.player(p1).getOre();
+        service.submit(gameId, new GameEngine.Submit(p1, "ACTION_FREE", null,
+                Map.of("conversion", "ORE_CREDIT")), null);
+        assertEquals(oreBefore - 1, service.loadLatestState(gameId).player(p1).getOre());
+        service.undoLastAction(gameId, p1);
+        GameState afterFreeUndo = service.loadLatestState(gameId);
+        assertEquals(oreBefore, afterFreeUndo.player(p1).getOre()); // 변환만 되돌아감
+        assertEquals(p1, afterFreeUndo.getActivePlayer());
+        long versionAfterFreeUndo = afterFreeUndo.getVersion();
+
         // 패스 → 언두
         String freeBooster = state.getBoard().getBoosterHolders().entrySet().stream()
                 .filter(e -> e.getValue() == null).map(Map.Entry::getKey).findFirst().orElseThrow();
         GameService.SubmitResult passResult = service.submit(gameId,
-                new GameEngine.Submit(p1, "ACTION_PASS", null, Map.of("booster", freeBooster)), versionAfterSetup);
+                new GameEngine.Submit(p1, "ACTION_PASS", null, Map.of("booster", freeBooster)), versionAfterFreeUndo);
         assertTrue(service.loadLatestState(gameId).player(p1).isPassed());
 
         GameService.SubmitResult undoResult = service.undoLastAction(gameId, p1);
@@ -149,12 +160,13 @@ class GameFlowIntegrationTest {
         }
         state = service.loadLatestState(gameId);
         assertEquals("CHOOSE_FACTION", state.topDecision().getType());
+        String picked = state.getBoard().getFactionPool().get(0); // 후보 4종 중 첫 번째
         service.submit(gameId, new GameEngine.Submit(b1, "CHOOSE_FACTION",
-                state.topDecision().getId(), Map.of("faction", "GEODENS")), null);
+                state.topDecision().getId(), Map.of("faction", picked)), null);
 
         GamePlayerEntity row = players.findById(new GamePlayerEntity.Key(
                 gameId, created.playersByNickname().get("b1"))).orElseThrow();
-        assertEquals("GEODENS", row.getFaction());
+        assertEquals(picked, row.getFaction());
         assertEquals((short) 1, row.getSeatNo());  // 첫 낙찰 = 턴 순서 1번
         assertEquals((short) 1, row.getBidVp());
     }
@@ -172,16 +184,17 @@ class GameFlowIntegrationTest {
         chatService.send(gameId, c1, "안녕하세요");
         chatService.send(gameId, c1, "두 번째");
 
-        // 비참가자 발신 거부
+        // 비참가자 발신·열람 모두 거부 (관전자 채팅 불가)
         UUID outsider = users.save(UserAccountEntity.builder()
                 .email("out@test").passwordHash("-").nickname("outsider").build()).getId();
         assertThrows(IllegalStateException.class, () -> chatService.send(gameId, outsider, "끼어들기"));
+        assertThrows(IllegalStateException.class, () -> chatService.history(gameId, outsider, 0));
 
-        List<ChatService.ChatView> history = chatService.history(gameId, 0);
+        List<ChatService.ChatView> history = chatService.history(gameId, c1, 0);
         assertEquals(2, history.size());
         assertEquals("안녕하세요", history.get(0).message());
         assertEquals("c1", history.get(0).nickname());
-        assertEquals(1, chatService.history(gameId, 1).size()); // afterSeq 필터
+        assertEquals(1, chatService.history(gameId, c1, 1).size()); // afterSeq 필터
 
         List<Map<String, Object>> events = service.loadEvents(gameId, 1);
         assertFalse(events.isEmpty());

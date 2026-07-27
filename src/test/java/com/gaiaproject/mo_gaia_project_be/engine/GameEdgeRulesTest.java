@@ -48,7 +48,7 @@ class GameEdgeRulesTest {
         for (int[] d : DIRS) {
             String n = new HexCoord(c.q() + d[0], c.r() + d[1]).key();
             HexState h = state.getHexes().get(n);
-            if (h != null && !h.hasBuilding() && h.getSatelliteOwner() == null && h.getShip() == null) {
+            if (h != null && !h.hasBuilding() && h.getSatelliteOwners().isEmpty() && h.getShip() == null) {
                 return n;
             }
         }
@@ -194,10 +194,42 @@ class GameEdgeRulesTest {
         assertTrue(e.getMessage().contains("기존 연방"));
     }
 
+    // ═══ 메인 액션 후 자유 행동 구간 + 명시적 턴 종료 (game-spec §7.10) ═══
+
+    @Test
+    void 메인_액션_후_자유_행동만_가능하고_턴_종료로_넘어간다() {
+        GameState state = readyGame();
+        PlayerState p1 = state.player("p1");
+        p1.setKnowledge(10);
+
+        engine.apply(state, new GameEngine.Submit("p1", "ACTION_RESEARCH", null, Map.of("track", "AI")));
+        assertEquals("p1", state.getActivePlayer()); // 자동으로 턴이 넘어가지 않음
+        assertTrue(state.isTurnEndPending());
+
+        // 두 번째 메인 액션은 거부
+        EngineException e = assertThrows(EngineException.class, () -> engine.apply(state,
+                new GameEngine.Submit("p1", "ACTION_RESEARCH", null, Map.of("track", "AI"))));
+        assertTrue(e.getMessage().contains("이미 메인 액션"));
+
+        // 자유 변환은 메인 액션 후에도 허용
+        int credits = p1.getCredits();
+        engine.apply(state, new GameEngine.Submit("p1", "ACTION_FREE", null, Map.of("conversion", "KNOWLEDGE_CREDIT")));
+        assertEquals(credits + 1, p1.getCredits());
+        assertEquals("p1", state.getActivePlayer());
+
+        // 명시적 턴 종료 → 다음 플레이어
+        engine.apply(state, new GameEngine.Submit("p1", "END_TURN", null, Map.of()));
+        assertEquals("p2", state.getActivePlayer());
+
+        // 메인 액션 없이 턴 종료는 거부
+        assertThrows(EngineException.class, () -> engine.apply(state,
+                new GameEngine.Submit("p2", "END_TURN", null, Map.of())));
+    }
+
     // ═══ 아이타 가이아 페이즈 — 6라운드 종료에도 해소 후 최종 점수 ═══
 
     @Test
-    void 아이타는_6라운드_종료에도_가이아_기술_타일을_받고_최종_점수로_넘어간다() {
+    void 아이타_가이아_테크는_라운드_진입_능력_페이즈_소속이라_6라운드_종료_시에는_발동하지_않는다() {
         GameState state = GameSetup.create(data, 3L, List.of(
                 new GameSetup.PlayerSeat("p1", "GEODENS"),
                 new GameSetup.PlayerSeat("p2", "GLEENS"),
@@ -216,22 +248,8 @@ class GameEdgeRulesTest {
             engine.apply(state, new GameEngine.Submit(state.getActivePlayer(), "ACTION_PASS", null, Map.of()));
         }
 
-        // 게임이 끝나기 전에 아이타 가이아 페이즈가 먼저 해소된다
-        assertEquals("PLAYING", state.getPhase());
-        assertEquals("ITARS_GAIA_TECH", state.topDecision().getType());
-
-        while (!state.getDecisionStack().isEmpty()) {
-            Decision top = state.topDecision();
-            switch (top.getType()) {
-                case "ITARS_GAIA_TECH" -> engine.apply(state, new GameEngine.Submit("p4", "ITARS_GAIA_TECH",
-                        top.getId(), Map.of("sacrificeCount", 1)));
-                case "CHOOSE_TECH_TILE" -> engine.apply(state, new GameEngine.Submit(top.getTarget(),
-                        "CHOOSE_TECH_TILE", top.getId(), Map.of("position", "AI")));
-                default -> throw new IllegalStateException("예상 밖 결정: " + top.getType());
-            }
-        }
-
-        assertEquals(1, p4.getTechTiles().size());
+        // 6라운드 종료 → 라운드 진입(능력 페이즈) 없이 즉시 최종 점수
         assertEquals("FINISHED", state.getPhase());
+        assertEquals(0, p4.getTechTiles().size());
     }
 }

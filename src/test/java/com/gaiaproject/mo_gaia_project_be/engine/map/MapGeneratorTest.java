@@ -47,22 +47,42 @@ class MapGeneratorTest {
     }
 
     @Test
-    void 함대_타일은_서로_인접하지_않는다() {
+    void 함대_타일은_서로_3칸_이내에_배치되지_않는다() {
+        java.util.Map<Integer, HexCoord> singleCoords = new java.util.HashMap<>();
+        for (var pos : data.sectors().get("positions").get("single")) {
+            singleCoords.put(pos.get("positionNo").asInt(),
+                    new HexCoord(pos.get("q").asInt(), pos.get("r").asInt()));
+        }
         for (long seed = 0; seed < 30; seed++) {
             MapGenerator.MapLayout layout = new MapGenerator(data).generate(seed);
 
-            Set<Integer> fleetPositions = new HashSet<>();
+            java.util.List<HexCoord> fleets = new java.util.ArrayList<>();
             for (MapGenerator.SingleHexPlacement p : layout.singleHexes()) {
                 if (p.tileId().startsWith("FLEET_")) {
-                    fleetPositions.add(p.positionNo());
+                    fleets.add(singleCoords.get(p.positionNo()));
                 }
             }
-            assertEquals(4, fleetPositions.size());
+            assertEquals(4, fleets.size());
 
-            for (var pair : data.sectors().get("fleetAdjacency")) {
-                boolean bothFleet = fleetPositions.contains(pair.get(0).asInt())
-                        && fleetPositions.contains(pair.get(1).asInt());
-                assertFalse(bothFleet, "seed " + seed + ": 함대 인접 위반 " + pair);
+            for (int i = 0; i < fleets.size(); i++) {
+                for (int j = i + 1; j < fleets.size(); j++) {
+                    assertTrue(fleets.get(i).distance(fleets.get(j)) >= 4,
+                            "seed " + seed + ": 함대 거리 " + fleets.get(i).distance(fleets.get(j)));
+                }
+            }
+        }
+    }
+
+    @Test
+    void 중앙_2칸은_섹터_1_4_중에서_랜덤_배치된다() {
+        Set<String> centerCandidates = Set.of("SECTOR_1", "SECTOR_2", "SECTOR_3", "SECTOR_4");
+        for (long seed = 0; seed < 30; seed++) {
+            MapGenerator.MapLayout layout = new MapGenerator(data).generate(seed);
+            for (MapGenerator.SectorPlacement s : layout.sectors()) {
+                if (s.positionNo() == 5 || s.positionNo() == 6) {
+                    assertTrue(centerCandidates.contains(s.sectorId()),
+                            "seed " + seed + ": 중앙에 " + s.sectorId());
+                }
             }
         }
     }

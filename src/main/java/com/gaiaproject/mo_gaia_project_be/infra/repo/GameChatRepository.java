@@ -12,4 +12,7 @@ public interface GameChatRepository extends JpaRepository<GameChatEntity, GameCh
     Optional<GameChatEntity> findFirstByGameIdOrderBySeqDesc(UUID gameId);
 
     List<GameChatEntity> findTop100ByGameIdAndSeqGreaterThanOrderBySeq(UUID gameId, long afterSeq);
+
+    /** 방 해산 시 채팅 기록 정리 (FK) */
+    void deleteByGameId(UUID gameId);
 }

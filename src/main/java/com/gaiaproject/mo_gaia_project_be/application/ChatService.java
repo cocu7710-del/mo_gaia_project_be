@@ -57,8 +57,12 @@ public class ChatService {
         return view;
     }
 
+    /** 채팅 열람도 참가자 전용 — 관전자는 채팅 접근 불가 (game-spec 12-6) */
     @Transactional(readOnly = true)
-    public List<ChatView> history(UUID gameId, long afterSeq) {
+    public List<ChatView> history(UUID gameId, UUID userId, long afterSeq) {
+        if (players.findById(new GamePlayerEntity.Key(gameId, userId)).isEmpty()) {
+            throw new IllegalStateException("게임 참가자만 채팅을 볼 수 있습니다");
+        }
         return chats.findTop100ByGameIdAndSeqGreaterThanOrderBySeq(gameId, afterSeq)
                 .stream().map(this::toView).toList();
     }
