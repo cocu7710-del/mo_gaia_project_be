@@ -29,7 +29,9 @@ public class RoomController {
 
     public record CreateRoomRequest(@NotBlank @Size(max = 50) String name,
                                     Boolean bidding, String undoPolicy, Integer leechTimerSeconds,
-                                    String bidMode, Boolean localMode) {}
+                                    String bidMode, Boolean localMode,
+                                    /** 지정 시 이 시드로 셋업 재현 (미지정 시 랜덤) — FE는 정밀도 보존 위해 문자열로 전송 */
+                                    Long seed) {}
 
     public record FactionRequest(@NotBlank String faction) {}
 
@@ -49,7 +51,8 @@ public class RoomController {
     public RoomService.RoomView create(@Valid @RequestBody CreateRoomRequest request, Authentication auth) {
         return rooms.createRoom(currentUserId(auth), request.name(),
                 new GameService.GameOptions(Boolean.TRUE.equals(request.bidding()), request.undoPolicy(),
-                        request.leechTimerSeconds(), request.bidMode(), Boolean.TRUE.equals(request.localMode())));
+                        request.leechTimerSeconds(), request.bidMode(), Boolean.TRUE.equals(request.localMode())),
+                request.seed());
     }
 
     @GetMapping

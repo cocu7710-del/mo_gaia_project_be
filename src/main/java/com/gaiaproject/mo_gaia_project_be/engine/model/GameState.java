@@ -1,5 +1,6 @@
 package com.gaiaproject.mo_gaia_project_be.engine.model;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -14,7 +15,9 @@ import java.util.Map;
 @Data
 public class GameState {
     private long version;
-    /** 셋업 시드 — 셋업 이후 파생 랜덤(3삽 행성 배정 등)의 결정성 보장 */
+    /** 셋업 시드 — 셋업 이후 파생 랜덤(3삽 행성 배정 등)의 결정성 보장.
+     * long 정밀도가 JS Number 한계를 넘어 FE 표시·복사용으로 문자열 직렬화 (숫자 역직렬화도 허용됨) */
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private long rngSeed;
     /** SETUP_BID / SETUP_MINES / SETUP_BOOSTER / PLAYING / FINISHED */
     private String phase;

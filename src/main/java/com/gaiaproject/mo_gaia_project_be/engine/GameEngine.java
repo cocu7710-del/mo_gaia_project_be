@@ -68,6 +68,7 @@ public class GameEngine {
             case "PLACE_BLACK_PLANET" -> applyPlaceBlackPlanet(state, submit);
             case "LEECH_RESPONSE" -> applyLeechResponse(state, submit);
             case "INCOME_POWER_ORDER" -> applyIncomePowerOrder(state, submit);
+            case "CHOOSE_TRACK_ADVANCE" -> applyChooseTrackAdvance(state, submit);
             case "TERRANS_GAIA_CONVERT" -> applyTerransGaiaConvert(state, submit);
             case "CHOOSE_FED_TOKEN_REUSE" -> applyFedTokenReuse(state, submit);
             case "CHOOSE_ARTIFACT" -> applyChooseArtifact(state, submit);
@@ -752,6 +753,11 @@ public class GameEngine {
 
     private List<EngineEvent> applyGaiaform(GameState state, Submit submit) {
         requireMainAction(state, submit);
+        return gaiaformCore(state, submit, 0);
+    }
+
+    /** 가이아포머 배치 공통 — rangeBonus는 거리 보너스 액션(부스터13·글린 점프) 체인용 */
+    private List<EngineEvent> gaiaformCore(GameState state, Submit submit, int rangeBonus) {
         HexState hex = requireHex(state, submit);
         HexCoord target = coordOf(submit);
         PlayerState p = state.player(submit.playerId());
@@ -770,7 +776,7 @@ public class GameEngine {
             throw new EngineException("사용 가능한 가이아포머가 없습니다");
         }
         int qicForRange = intOf(submit.payload(), "qicForRange");
-        checkRange(state, submit.playerId(), target, p, qicForRange, 0);
+        checkRange(state, submit.playerId(), target, p, qicForRange, rangeBonus);
         requireResources(p, 0, 0, qicForRange);
 
         Map<String, Object> before = resourceSnapshot(p);
@@ -1111,13 +1117,21 @@ public class GameEngine {
                         "resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), List.of()));
     }
 
-    /** 소각: bowl2에서 2개 제거 → 1개 bowl3. 아이타는 제거분 1개가 가이아 구역으로. 브레인스톤은 소각 제거 대상 아님(기본) */
+    /** 소각: bowl2에서 2개 제거 → 1개 bowl3. 아이타는 제거분 1개가 가이아 구역으로.
+     * 브레인스톤은 소각 제거 대상은 아니지만, bowl2에 있으면 올라가는 1개로 우선 이동(타클론에게 항상 이득) */
     private void burnPower(PlayerState p, JsonNode faction) {
-        if (p.getBowl2() < 2) {
-            throw new EngineException("bowl2 토큰 부족 (소각에 2개 필요)");
+        boolean brainstoneInBowl2 = "BOWL2".equals(p.getBrainstone());
+        if (brainstoneInBowl2 && p.getBowl2() >= 1) {
+            // 일반 토큰 1개 소각 + 브레인스톤이 bowl3로 이동
+            p.setBowl2(p.getBowl2() - 1);
+            p.setBrainstone("BOWL3");
+        } else {
+            if (p.getBowl2() < 2) {
+                throw new EngineException("bowl2 토큰 부족 (소각에 2개 필요)");
+            }
+            p.setBowl2(p.getBowl2() - 2);
+            p.setBowl3(p.getBowl3() + 1);
         }
-        p.setBowl2(p.getBowl2() - 2);
-        p.setBowl3(p.getBowl3() + 1);
         if (hasAbility(faction, "BURN_TO_GAIA")) {
             p.setGaiaPower(p.getGaiaPower() + 1); // 아이타: 소각 제거분이 가이아 구역으로
         }
@@ -1263,15 +1277,33 @@ public class GameEngine {
         piHex.setBuildingType("MINE");
     }
 
-    /** 파이락 PI: 연구소 → 교역소 무료 업그레이드 + 지식 트랙 1칸 (✅명명 확정 — 일반 업그레이드 취급, 커밋은 upgradeCore 공용) */
+    /** 파이락 PI: 연구소 → 교역소 무료 업그레이드 + 원하는 연구 트랙 1칸 무료 전진
+     * (✅명명 확정 — 일반 업그레이드 취급, 커밋은 upgradeCore 공용. 트랙은 CHOOSE_TRACK_ADVANCE 결정으로 선택) */
     private List<Map<String, Object>> firaksFreeUpgrade(GameState state, Submit submit) {
         HexState hex = requireHex(state, submit);
         if (!submit.playerId().equals(hex.getBuildingOwner()) || !"RESEARCH_LAB".equals(hex.getBuildingType())) {
             throw new EngineException("본인 연구소를 지정해야 합니다");
         }
         List<Map<String, Object>> pushed = upgradeCore(state, submit, hex, coordOf(submit), "TRADING_STATION");
-        advanceTrackIfPossible(state, submit.playerId(), "SCIENCE");
+        pushed.add(pushDecision(state, "CHOOSE_TRACK_ADVANCE", submit.playerId(), Map.of()));
         return pushed;
+    }
+
+    /** 원하는 연구 트랙 1칸 무료 전진 결정 — 전진 불가 트랙(5레벨 점유·연방 토큰 부족·발타크 항해 잠금 등)은 거부 */
+    private List<EngineEvent> applyChooseTrackAdvance(GameState state, Submit submit) {
+        Decision top = requireTopDecision(state, submit, "CHOOSE_TRACK_ADVANCE");
+        String track = (String) submit.payload().get("track");
+        if (track == null || !TRACK_NAMES.contains(track)) {
+            throw new EngineException("전진할 트랙을 지정해야 합니다");
+        }
+        PlayerState p = state.player(submit.playerId());
+        int before = p.track(track);
+        advanceTrackIfPossible(state, submit.playerId(), track);
+        if (p.track(track) == before) {
+            throw new EngineException("전진할 수 없는 트랙입니다: " + track);
+        }
+        state.getDecisionStack().remove(top);
+        return List.of(event("DECISION_RESOLVED", submit, Map.of("track", track), List.of()));
     }
 
     /** 하이브 PI: 빈 우주에 우주정거장 배치 (리치 없음 ✅확정, 파워값 1 — 연방 구성 요소) */
@@ -1399,6 +1431,11 @@ public class GameEngine {
     private List<EngineEvent> applyFleetEnter(GameState state, Submit submit) {
         requireMainAction(state, submit);
         String ship = (String) submit.payload().get("ship");
+        return fleetEnterCore(state, submit, ship, 0);
+    }
+
+    /** 함대 입장 공통 — rangeBonus는 거리 보너스 액션(부스터13·글린 점프) 체인용 */
+    private List<EngineEvent> fleetEnterCore(GameState state, Submit submit, String ship, int rangeBonus) {
         if (ship == null || !FLEET_SHIPS.contains(ship)) {
             throw new EngineException("함대를 지정해야 합니다");
         }
@@ -1422,7 +1459,7 @@ public class GameEngine {
                 .findFirst()
                 .orElseThrow(() -> new EngineException("맵에 없는 함대입니다: " + ship));
         int qicForRange = intOf(submit.payload(), "qicForRange");
-        checkRange(state, submit.playerId(), shipCoord, p, qicForRange, 0);
+        checkRange(state, submit.playerId(), shipCoord, p, qicForRange, rangeBonus);
         requireResources(p, 0, 0, qicForRange);
         Map<String, Object> before = resourceSnapshot(p);
         p.setQic(p.getQic() - qicForRange);
@@ -1464,7 +1501,10 @@ public class GameEngine {
         if (!p.getFleetProbes().contains(action.get("ship").asText())) {
             throw new EngineException("해당 함대에 입장해야 사용할 수 있습니다: " + action.get("ship").asText());
         }
-        if (state.getBoard().getPowerActionsUsedThisRound().contains(actionId)) {
+        // 인공물 획득은 라운드 공유 1회 풀에서 제외 — 라운드 무관 반복 사용 가능,
+        // 대신 각 인공물이 1회만 획득되도록 applyChooseArtifact에서 선점 검증
+        boolean artifactAction = "ACQUIRE_ARTIFACT".equals(action.path("special").asText(""));
+        if (!artifactAction && state.getBoard().getPowerActionsUsedThisRound().contains(actionId)) {
             throw new EngineException("이번 라운드에 이미 사용된 액션입니다: " + actionId);
         }
         Map<String, Object> before = resourceSnapshot(p);
@@ -1502,7 +1542,9 @@ public class GameEngine {
                 && p.getTechTiles().contains("ADV_TILE_21") && !p.getCoveredTechTiles().contains("ADV_TILE_21")) {
             gainVp(p, 4, "QIC_ACTION"); // QIC 액션마다 +4VP (고급㉑) — 점수 창 별도 컬럼 (J-12)
         }
-        state.getBoard().getPowerActionsUsedThisRound().add(actionId);
+        if (!artifactAction) {
+            state.getBoard().getPowerActionsUsedThisRound().add(actionId);
+        }
 
         state.setTurnEndPending(true);
         return List.of(event("ACTION_FLEET_ACTION", submit,
@@ -1691,6 +1733,26 @@ public class GameEngine {
         boolean freeBuild = Boolean.TRUE.equals(top.getContext().get("freeBuild"));
         int rangeBonus = (int) top.getContext().getOrDefault("rangeBonus", 0);
         String planetOnly = (String) top.getContext().get("planetOnly");
+
+        // 거리 보너스 액션(부스터13 +3·글린 점프 +2)은 광산 건설 전용이 아니라 "거리 액션" —
+        // 함대 헥스면 함대 입장, 차원 변형 행성이면 가이아포밍으로 처리 (모두 rangeBonus 적용).
+        // 결정 응답이므로 이벤트는 DECISION_RESOLVED로 남긴다 — ACTION_*로 남기면 언두가 이걸 되돌림 단위로
+        // 잡는데 스냅샷은 메인 액션 직전에만 있어 "복원 스냅샷 없음"으로 실패한다.
+        if (rangeBonus > 0) {
+            HexState targetHex = requireHex(state, submit);
+            if (targetHex.getShip() != null) {
+                state.getDecisionStack().remove(top);
+                return fleetEnterCore(state, submit, targetHex.getShip(), rangeBonus).stream()
+                        .map(e -> new EngineEvent("DECISION_RESOLVED", e.actor(), e.payload()))
+                        .toList();
+            }
+            if ("TRANSDIM".equals(targetHex.getPlanet())) {
+                state.getDecisionStack().remove(top);
+                return gaiaformCore(state, submit, rangeBonus).stream()
+                        .map(e -> new EngineEvent("DECISION_RESOLVED", e.actor(), e.payload()))
+                        .toList();
+            }
+        }
 
         state.getDecisionStack().remove(top);
         List<Map<String, Object>> pushed = buildMineCore(state, submit,
@@ -2474,7 +2536,9 @@ public class GameEngine {
 
     // ═══════════════ 수입 페이즈 ═══════════════
 
-    private record Income(int credits, int ore, int knowledge, int qic, int vp, int charge, int tokens) {}
+    /** powerItems: 파워 수입 출처별 항목 [{type: CHARGE|TOKENS, amount, source}] — 순서 결정 UI용 */
+    private record Income(int credits, int ore, int knowledge, int qic, int vp, int charge, int tokens,
+                          List<Map<String, Object>> powerItems) {}
 
     private void incomePhase(GameState state) {
         for (Map.Entry<String, PlayerState> e : state.getPlayers().entrySet()) {
@@ -2492,7 +2556,8 @@ public class GameEngine {
 
             if (income.charge() > 0 && income.tokens() > 0 && powerOrderMatters(p, income)) {
                 state.getDecisionStack().add(new Decision(state.newDecisionId(), "INCOME_POWER_ORDER",
-                        playerId, Map.of("powerCharge", income.charge(), "powerTokens", income.tokens())));
+                        playerId, Map.of("powerCharge", income.charge(), "powerTokens", income.tokens(),
+                                "items", income.powerItems())));
             } else {
                 p.setBowl1(p.getBowl1() + income.tokens()); // 기본: 토큰 먼저
                 chargePower(p, income.charge());
@@ -2522,30 +2587,60 @@ public class GameEngine {
         return new int[]{copy.getBowl1(), copy.getBowl2(), copy.getBowl3()};
     }
 
+    @SuppressWarnings("unchecked")
     private List<EngineEvent> applyIncomePowerOrder(GameState state, Submit submit) {
         Decision top = requireTopDecision(state, submit, "INCOME_POWER_ORDER");
         PlayerState p = state.player(submit.playerId());
         Map<String, Object> before = resourceSnapshot(p);
-        int charge = (int) top.getContext().get("powerCharge");
-        int tokens = (int) top.getContext().get("powerTokens");
-        String order = (String) submit.payload().getOrDefault("order", "TOKENS_FIRST");
 
-        if ("CHARGE_FIRST".equals(order)) {
-            chargePower(p, charge);
-            p.setBowl1(p.getBowl1() + tokens);
+        List<Map<String, Object>> items = (List<Map<String, Object>>) top.getContext().get("items");
+        Object stepsRaw = submit.payload().get("steps");
+        if (items != null && stepsRaw instanceof List<?> steps) {
+            // 항목별 순서 지정 — steps는 items 인덱스의 순열 (클릭 순서대로 적용)
+            if (steps.size() != items.size()) {
+                throw new EngineException("모든 파워 수입 항목의 순서를 지정해야 합니다");
+            }
+            boolean[] seen = new boolean[items.size()];
+            for (Object s : steps) {
+                int idx = ((Number) s).intValue();
+                if (idx < 0 || idx >= items.size() || seen[idx]) {
+                    throw new EngineException("잘못된 순서 지정입니다");
+                }
+                seen[idx] = true;
+                Map<String, Object> item = items.get(idx);
+                int amount = ((Number) item.get("amount")).intValue();
+                if ("TOKENS".equals(item.get("type"))) {
+                    p.setBowl1(p.getBowl1() + amount);
+                } else {
+                    chargePower(p, amount);
+                }
+            }
         } else {
-            p.setBowl1(p.getBowl1() + tokens);
-            chargePower(p, charge);
+            // 하위 호환 — 전체를 토큰 먼저/차징 먼저 두 가지로만
+            int charge = (int) top.getContext().get("powerCharge");
+            int tokens = (int) top.getContext().get("powerTokens");
+            String order = (String) submit.payload().getOrDefault("order", "TOKENS_FIRST");
+            if ("CHARGE_FIRST".equals(order)) {
+                chargePower(p, charge);
+                p.setBowl1(p.getBowl1() + tokens);
+            } else {
+                p.setBowl1(p.getBowl1() + tokens);
+                chargePower(p, charge);
+            }
         }
         state.getDecisionStack().remove(top);
 
         return List.of(event("DECISION_RESOLVED", submit,
-                Map.of("order", order,
-                        "resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), List.of()));
+                Map.of("resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), List.of()));
     }
 
     /** 종족 기본 + 건물 + PI + 기술 타일 + 부스터 + 경제/지식 트랙 수입 합산 */
     private Income computeIncome(GameState state, String playerId) {
+        return computeIncome(state, playerId, true);
+    }
+
+    /** includeBooster=false: 부스터 수입 제외 — 미리보기에서 아직 패스(부스터 교환) 전인 플레이어용 */
+    private Income computeIncome(GameState state, String playerId, boolean includeBooster) {
         PlayerState p = state.player(playerId);
         JsonNode faction = data.faction(p.getFaction());
         JsonNode buildingIncome = data.constants().get("buildingIncome");
@@ -2559,6 +2654,7 @@ public class GameEngine {
         int vp = 0;
         int charge = 0;
         int tokens = 0;
+        List<Map<String, Object>> powerItems = new ArrayList<>();
 
         // 종족 기본 수입
         JsonNode base = faction.has("baseIncome") ? faction.get("baseIncome")
@@ -2567,6 +2663,9 @@ public class GameEngine {
         ore += base.path("ore").asInt(0);
         knowledge += base.path("knowledge").asInt(0);
         tokens += base.path("powerToken").asInt(0);
+        if (base.path("powerToken").asInt(0) > 0) {
+            powerItems.add(Map.of("type", "TOKENS", "amount", base.path("powerToken").asInt(0), "source", "종족"));
+        }
 
         // 건물 수입
         int mines = Math.min(builtCount(state, playerId, "MINE"), 8);
@@ -2582,6 +2681,9 @@ public class GameEngine {
             credits += new int[]{0, 3, 7, 12}[labs];
         } else if (nevlas) {
             charge += 2 * labs;
+            if (labs > 0) {
+                powerItems.add(Map.of("type", "CHARGE", "amount", 2 * labs, "source", "연구소"));
+            }
         } else {
             knowledge += buildingIncome.get("researchLabKnowledge").get(labs).asInt();
         }
@@ -2597,6 +2699,12 @@ public class GameEngine {
             tokens += pi.path("powerToken").asInt(0);
             qic += pi.path("qic").asInt(0);
             ore += pi.path("ore").asInt(0);
+            if (pi.path("powerCharge").asInt(0) > 0) {
+                powerItems.add(Map.of("type", "CHARGE", "amount", pi.path("powerCharge").asInt(0), "source", "의회"));
+            }
+            if (pi.path("powerToken").asInt(0) > 0) {
+                powerItems.add(Map.of("type", "TOKENS", "amount", pi.path("powerToken").asInt(0), "source", "의회"));
+            }
         }
 
         // 기술 타일 (덮이지 않은 INCOME 타일)
@@ -2611,11 +2719,14 @@ public class GameEngine {
                 ore += inc.path("ore").asInt(0);
                 knowledge += inc.path("knowledge").asInt(0);
                 charge += inc.path("powerCharge").asInt(0);
+                if (inc.path("powerCharge").asInt(0) > 0) {
+                    powerItems.add(Map.of("type", "CHARGE", "amount", inc.path("powerCharge").asInt(0), "source", "기술 타일"));
+                }
             }
         }
 
         // 부스터
-        if (p.getBooster() != null) {
+        if (includeBooster && p.getBooster() != null) {
             JsonNode inc = findTile(data.tiles().get("boosters"), p.getBooster()).get("income");
             credits += inc.path("credits").asInt(0);
             ore += inc.path("ore").asInt(0);
@@ -2623,6 +2734,12 @@ public class GameEngine {
             qic += inc.path("qic").asInt(0);
             charge += inc.path("powerCharge").asInt(0);
             tokens += inc.path("powerTokens").asInt(0);
+            if (inc.path("powerCharge").asInt(0) > 0) {
+                powerItems.add(Map.of("type", "CHARGE", "amount", inc.path("powerCharge").asInt(0), "source", "라운드 부스터"));
+            }
+            if (inc.path("powerTokens").asInt(0) > 0) {
+                powerItems.add(Map.of("type", "TOKENS", "amount", inc.path("powerTokens").asInt(0), "source", "라운드 부스터"));
+            }
         }
 
         // 경제/지식 트랙 (레벨 5 = 수입 소멸)
@@ -2634,6 +2751,9 @@ public class GameEngine {
             ore += inc.path("ore").asInt(0);
             vp += inc.path("vp").asInt(0);
             charge += inc.path("powerCharge").asInt(0);
+            if (inc.path("powerCharge").asInt(0) > 0) {
+                powerItems.add(Map.of("type", "CHARGE", "amount", inc.path("powerCharge").asInt(0), "source", "경제 트랙"));
+            }
         }
         int science = p.track("SCIENCE");
         if (science >= 1 && science <= 4) {
@@ -2652,7 +2772,7 @@ public class GameEngine {
             }
         }
 
-        return new Income(credits, ore, knowledge, qic, vp, charge, tokens);
+        return new Income(credits, ore, knowledge, qic, vp, charge, tokens, powerItems);
     }
 
     private void addQic(GameState state, String playerId, int amount) {
@@ -2920,11 +3040,12 @@ public class GameEngine {
         p.getVpBreakdown().merge(category, amount, Integer::sum);
     }
 
-    /** 수입 미리보기 — 다음 수입 페이즈 예상값 (FE 플레이어 카드 위첨자용) */
+    /** 수입 미리보기 — 다음 수입 페이즈 예상값 (FE 플레이어 카드 위첨자용).
+     * 부스터는 패스 시 교환되므로, 아직 패스 전인 플레이어는 현재 부스터 수입을 제외한다 */
     public Map<String, Map<String, Integer>> incomePreview(GameState state) {
         Map<String, Map<String, Integer>> result = new LinkedHashMap<>();
         for (String playerId : state.getPlayers().keySet()) {
-            Income income = computeIncome(state, playerId);
+            Income income = computeIncome(state, playerId, state.player(playerId).isPassed());
             Map<String, Integer> view = new LinkedHashMap<>();
             view.put("credits", income.credits());
             view.put("ore", income.ore());

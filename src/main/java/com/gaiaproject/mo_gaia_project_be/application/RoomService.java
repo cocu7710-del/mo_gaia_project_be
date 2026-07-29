@@ -70,12 +70,18 @@ public class RoomService {
 
     @Transactional
     public RoomView createRoom(UUID creatorId, String name, GameService.GameOptions options) {
+        return createRoom(creatorId, name, options, null);
+    }
+
+    @Transactional
+    public RoomView createRoom(UUID creatorId, String name, GameService.GameOptions options, Long seed) {
         GameEntity game = games.save(GameEntity.builder()
                 .name(name)
                 .status("WAITING")
                 .rulesetVersion(gameData.rulesetVersion())
                 .options(codec.writeMap(options.asMap()))
-                .rngSeed(ThreadLocalRandom.current().nextLong()) // 시작 전 확정 — 재생 결정성
+                // 시작 전 확정 — 재생 결정성. 시드 직접 지정 시 같은 셋업 재현 가능
+                .rngSeed(seed != null ? seed : ThreadLocalRandom.current().nextLong())
                 .lastSeq(0)
                 .createdBy(creatorId)
                 .build());
