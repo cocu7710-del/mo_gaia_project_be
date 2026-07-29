@@ -15,4 +15,5 @@ WORKDIR /app
 COPY --from=build /app/build/libs/*.jar app.jar
 # Render가 PORT 환경변수를 주입 — application.properties의 server.port=${PORT:8080}가 사용
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# 무료 인스턴스(512MB)에서 OOM(137) 방지 — 힙·메타스페이스·스레드 스택 상한 고정
+ENTRYPOINT ["java", "-Xmx256m", "-XX:MaxMetaspaceSize=160m", "-Xss512k", "-jar", "app.jar"]
