@@ -55,7 +55,8 @@ public class SecurityConfig {
                 .securityContext(sc -> sc.securityContextRepository(contextRepository))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/error").permitAll()
-                        .anyRequest().authenticated()) // /ws 핸드셰이크도 세션 필요
+                        .requestMatchers("/api/**", "/ws/**").authenticated() // /ws 핸드셰이크도 세션 필요
+                        .anyRequest().permitAll()) // 그 외 = FE 정적 파일·SPA 라우트 (같은 오리진 서빙)
                 .exceptionHandling(e -> e.authenticationEntryPoint(
                         (request, response, ex) -> response.sendError(401, "로그인이 필요합니다")))
                 .formLogin(AbstractHttpConfigurer::disable)

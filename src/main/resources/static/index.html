@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>가이아 프로젝트</title>
+    <script>
+      // 카카오톡 인앱 브라우저는 자체 주소창/하단 툴바가 항상 고정 노출되어 화면을 가림 —
+      // 웹 코드로는 그 UI를 없앨 수 없어, 감지 즉시 기본 브라우저로 강제 이탈시킨다.
+      if (/KAKAOTALK/i.test(navigator.userAgent)) {
+        location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href)
+      }
+    </script>
+    <script type="module" crossorigin src="/assets/index-DA3XCDtv.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DGssGL0b.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
