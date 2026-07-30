@@ -2294,7 +2294,10 @@ public class GameEngine {
     private boolean hasOpponentBuildingNear(GameState state, String playerId, HexCoord target, int radius) {
         for (Map.Entry<String, HexState> e : state.getHexes().entrySet()) {
             HexState h = e.getValue();
-            if (h.hasBuilding() && !playerId.equals(h.getBuildingOwner())
+            boolean opponentBuilding = h.hasBuilding() && !playerId.equals(h.getBuildingOwner());
+            // 란티다 기생 광산도 상대 건물로 취급 — 교역소 인접 할인 대상 (검은 행성 광산은 buildingOwner로 이미 포함)
+            boolean opponentParasite = h.getParasiteOwner() != null && !playerId.equals(h.getParasiteOwner());
+            if ((opponentBuilding || opponentParasite)
                     && HexCoord.parse(e.getKey()).distance(target) <= radius) {
                 return true;
             }
