@@ -315,7 +315,7 @@ public class GameEngine {
             hex.setParasiteOwner(submit.playerId());
             roundScore(state, p, "MINE_PLACED", 1);
             techMineBuildVp(p, "GAIA".equals(planet));
-            newColonizationTriggers(state, submit.playerId(), newSector, false); // 기생은 행성 종류 미개척
+            newColonizationTriggers(state, submit.playerId(), newSector, false, hex.getSectorId()); // 기생은 행성 종류 미개척
             if (hasAbility(faction, "PI_PARASITE_MINE_KNOWLEDGE_2")
                     && builtCount(state, submit.playerId(), "PLANETARY_INSTITUTE") > 0) {
                 p.setKnowledge(p.getKnowledge() + 2);
@@ -383,7 +383,7 @@ public class GameEngine {
 
         roundScore(state, p, "MINE_PLACED", 1);
         techMineBuildVp(p, gaia);
-        newColonizationTriggers(state, submit.playerId(), newSector, newPlanetType);
+        newColonizationTriggers(state, submit.playerId(), newSector, newPlanetType, hex.getSectorId());
         if (rawShovels > 0) {
             roundScore(state, p, "TERRAFORM_STEP", rawShovels);
             if (hasActiveTile(p, "ADV_TILE_10")) {
@@ -1782,7 +1782,7 @@ public class GameEngine {
         hex.setBuildingType("BLACK_PLANET_MINE"); // 광산 취급 (재고 미소모, 수입 무관 — E-3)
         roundScore(state, p, "MINE_PLACED", 1);
         techMineBuildVp(p, false); // 광산 건설 행동 취급 — 고급⑯ 발동 (인공물 ⑦⑧과 동일 규칙)
-        newColonizationTriggers(state, submit.playerId(), newSector, true); // 검은행성 = 항상 새 행성 종류
+        newColonizationTriggers(state, submit.playerId(), newSector, true, hex.getSectorId()); // 검은행성 = 항상 새 행성 종류
         autoIncorporateIntoFederation(state, submit.playerId(), target);
 
         state.getDecisionStack().remove(top);
@@ -2356,12 +2356,16 @@ public class GameEngine {
     }
 
     /** 새 섹터 진입·새 행성 종류 개척 트리거 (라운드 점수 + 기오덴·다카니안 PI 패시브) — 커밋 후 호출 */
-    private void newColonizationTriggers(GameState state, String playerId, boolean newSector, boolean newPlanetType) {
+    private void newColonizationTriggers(GameState state, String playerId, boolean newSector, boolean newPlanetType,
+                                         String sectorId) {
         PlayerState p = state.player(playerId);
         JsonNode faction = data.faction(p.getFaction());
         if (newSector) {
             roundScore(state, p, "NEW_SECTOR_ENTERED", 1);
-            if (hasAbility(faction, "PI_NEW_SECTOR_MINE_BONUS")
+            // 다카니안 PI: 기본 구역(10헥스)·깊은 구역(3헥스)만 해당 — 1헥스 타일(SINGLE_*) 제외
+            boolean bonusSector = sectorId != null
+                    && (sectorId.startsWith("SECTOR_") || sectorId.startsWith("DEEP_"));
+            if (bonusSector && hasAbility(faction, "PI_NEW_SECTOR_MINE_BONUS")
                     && builtCount(state, playerId, "PLANETARY_INSTITUTE") > 0) {
                 p.setCredits(p.getCredits() + 2); // 다카니안 PI: 새 섹터 광산 +2크레딧 +1지식
                 p.setKnowledge(p.getKnowledge() + 1);
