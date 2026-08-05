@@ -22,7 +22,20 @@ else
   git -C "$HOME/mo_gaia_project_be" pull
 fi
 
-# 4. 빌드 + 기동 (부팅 시 자동 재시작: restart: unless-stopped)
+# 4. 저사양 VM(E2.1.Micro 1GB) 대비 — 램 2GB 미만이면 스왑 2GB 생성 + JVM 상한 축소
+mem_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+if [ "$mem_kb" -lt 2000000 ]; then
+  if [ ! -f /swapfile ]; then
+    sudo fallocate -l 2G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+  fi
+  echo 'JAVA_OPTS=-Xmx256m -XX:MaxMetaspaceSize=160m -Xss512k' > "$HOME/mo_gaia_project_be/deploy/oracle/.env"
+fi
+
+# 5. 빌드 + 기동 (부팅 시 자동 재시작: restart: unless-stopped)
 cd "$HOME/mo_gaia_project_be/deploy/oracle"
 sudo docker compose up -d --build
 

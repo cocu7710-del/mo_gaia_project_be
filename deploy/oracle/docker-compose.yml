@@ -28,8 +28,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/gaia
       SPRING_DATASOURCE_USERNAME: gaia
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-gaia}
-      # Always Free VM(램 12~24GB)이라 Render의 256m 상한을 해제
-      JAVA_OPTS: "-Xmx2g"
+      # 기본은 A1 VM(램 6GB+) 기준. 저사양(E2.1.Micro 1GB)은 setup.sh가 .env로 축소값을 지정
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx2g}
     ports:
       - "80:8080"
 
