@@ -1,0 +1,37 @@
+# 오라클 클라우드 Always Free VM 운영용 — DB + 앱(FE 포함)을 한 VM에서 구동
+# 사용: sudo docker compose up -d --build  (초기 설정은 setup.sh, 갱신은 redeploy.sh)
+# DB 비밀번호 변경 시: 같은 폴더에 .env 파일로 DB_PASSWORD=... 지정 (DB는 외부 미노출)
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gaia
+      POSTGRES_USER: gaia
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-gaia}
+    volumes:
+      - gaia-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gaia -d gaia"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: ../..
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/gaia
+      SPRING_DATASOURCE_USERNAME: gaia
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-gaia}
+      # Always Free VM(램 12~24GB)이라 Render의 256m 상한을 해제
+      JAVA_OPTS: "-Xmx2g"
+    ports:
+      - "80:8080"
+
+volumes:
+  gaia-pgdata:
