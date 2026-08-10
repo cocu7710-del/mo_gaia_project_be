@@ -1522,7 +1522,8 @@ public class GameEngine {
             case "VP_2_PLUS_1_PER_PLANET_TYPE" -> gainVp(p, 2 + planetTypesWithArtifacts(state, submit.playerId()), "FLEET");
             case "INSTANT_GAIAFORM" -> instantGaiaform(state, submit);
             case "BUILD_MINE_TERRAFORM_1_FREE" -> pushed.add(pushFreeMine(state, submit.playerId(), 1, false, 0, null));
-            case "ADVANCE_TRACK_1" -> paidTrackAdvance(state, submit.playerId(), (String) submit.payload().get("track"));
+            // 트랙은 액션 확정 후 CHOOSE_TRACK_ADVANCE 결정으로 선택 (파이락 의회와 동일 플로우)
+            case "ADVANCE_TRACK_1" -> pushed.add(pushDecision(state, "CHOOSE_TRACK_ADVANCE", submit.playerId(), Map.of()));
             case "BUILD_MINE_ON_ASTEROIDS" -> pushed.add(pushFreeMine(state, submit.playerId(), 0, true, 0, "ASTEROIDS"));
             case "GAIN_TECH_TILE" -> pushed.add(pushDecision(state, "CHOOSE_TECH_TILE", submit.playerId(), Map.of()));
             case "UPGRADE_MINE_TO_TS" -> pushed.addAll(fleetUpgrade(state, submit, "MINE", "TRADING_STATION"));
