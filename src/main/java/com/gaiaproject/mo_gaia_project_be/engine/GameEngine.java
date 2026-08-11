@@ -1023,7 +1023,9 @@ public class GameEngine {
             case "PI_AND_ACADEMY" -> builtCount(state, playerId, "PLANETARY_INSTITUTE") + builtCount(state, playerId, "ACADEMY");
             case "GAIA_PLANET" -> gaiaPlanetCount(state, playerId);
             case "PLANET_TYPE" -> colonizedPlanetTypes(state, playerId).size();
-            case "GAIAFORMER" -> p.stockOf("GAIAFORMER") + builtCount(state, playerId, "GAIAFORMER");
+            // 대기(재고) + 포밍중(맵) + 발타크 QIC 변환분(라운드 종료 시 반환되는 임시 상태) — 소행성 영구 소각만 제외
+            case "GAIAFORMER" -> p.stockOf("GAIAFORMER") + builtCount(state, playerId, "GAIAFORMER")
+                    + p.getBaltaksConvertedFormers();
             case "DEEP_SECTOR_BUILDING" -> deepSectorBuildings(state, playerId);
             default -> 0;
         };
