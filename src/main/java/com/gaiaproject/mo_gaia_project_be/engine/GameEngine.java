@@ -1677,6 +1677,7 @@ public class GameEngine {
                 gainVp(p, 7, "ARTIFACT");
                 // 획득 = 가상 광산 건설 행동 취급 (H-3): 라운드 점수 + 건설 VP 타일 발동, 수입·재고·리치는 무관
                 roundScore(state, p, "MINE_PLACED", 1);
+                roundScore(state, p, "NEW_PLANET_TYPE_COLONIZED", 1); // 가상 행성 종류 +1 = 새 종류 개척 취급
                 techMineBuildVp(p, false);
             }
             case "VP_3_PER_SCIENCE_LEVEL" -> gainVp(p, 3 * p.track("SCIENCE"), "ARTIFACT");
