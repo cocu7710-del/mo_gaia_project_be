@@ -1266,15 +1266,17 @@ public class GameEngine {
         paidTrackAdvance(state, submit.playerId(), track);
     }
 
-    /** 엠바스 PI: 광산 ↔ 의회 위치 교환 (리치 없음) */
+    /** 엠바스 PI: 광산 ↔ 의회 위치 교환 (리치 없음) — 대상 광산(hexQ/hexR)만 지정, 의회는 1개뿐이라 자동 탐색 */
     private void ambasSwap(GameState state, Submit submit) {
-        HexState mineHex = hexAt(state, submit.payload(), "mineQ", "mineR");
-        HexState piHex = hexAt(state, submit.payload(), "piQ", "piR");
+        HexState mineHex = requireHex(state, submit);
         String playerId = submit.playerId();
-        if (!playerId.equals(mineHex.getBuildingOwner()) || !"MINE".equals(mineHex.getBuildingType())
-                || !playerId.equals(piHex.getBuildingOwner()) || !"PLANETARY_INSTITUTE".equals(piHex.getBuildingType())) {
-            throw new EngineException("본인의 광산과 행성 의회를 지정해야 합니다");
+        if (!playerId.equals(mineHex.getBuildingOwner()) || !"MINE".equals(mineHex.getBuildingType())) {
+            throw new EngineException("본인의 광산을 지정해야 합니다");
         }
+        HexState piHex = state.getHexes().values().stream()
+                .filter(h -> playerId.equals(h.getBuildingOwner()) && "PLANETARY_INSTITUTE".equals(h.getBuildingType()))
+                .findFirst()
+                .orElseThrow(() -> new EngineException("행성 의회가 맵에 없습니다"));
         mineHex.setBuildingType("PLANETARY_INSTITUTE");
         piHex.setBuildingType("MINE");
     }
@@ -1404,14 +1406,6 @@ public class GameEngine {
             default -> throw new EngineException("알 수 없는 개인 액션: " + tile);
         }
         return pushed;
-    }
-
-    private HexState hexAt(GameState state, Map<String, Object> payload, String qKey, String rKey) {
-        HexState hex = state.getHexes().get(new HexCoord(intOf(payload, qKey), intOf(payload, rKey)).key());
-        if (hex == null) {
-            throw new EngineException("존재하지 않는 헥스입니다");
-        }
-        return hex;
     }
 
     private void requireFactionAbility(JsonNode faction, String ability) {
