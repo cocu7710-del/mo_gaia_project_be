@@ -1355,9 +1355,12 @@ public class GameEngine {
             String playerId = order.get(i);
             PlayerState p = state.player(playerId);
             JsonNode faction = data.faction(p.getFaction());
+            // 수입 순환 결정이 걸려 있으면 미룸 — 순환이 끝난 뒤 applyIncomePowerOrder에서 푸시
+            // (스택상 이 결정이 수입 결정보다 위라 먼저 해소되어, 잔여분이 순환 전에 bowl1로 돌아가는 문제 방지)
             if (hasAbility(faction, "PI_GAIA_4_TO_TECH_TILE")
                     && builtCount(state, playerId, "PLANETARY_INSTITUTE") > 0
-                    && p.getGaiaPower() >= 4) {
+                    && p.getGaiaPower() >= 4
+                    && !hasPendingIncomeOrder(state, playerId)) {
                 pushDecision(state, "ITARS_GAIA_TECH", playerId, Map.of("tokens", p.getGaiaPower()));
             }
             if (hasAbility(faction, "PI_PERSONAL_ACTION_TILES")
@@ -2463,35 +2466,51 @@ public class GameEngine {
                 hex.setPlanet("GAIA");
             }
         }
-        for (Map.Entry<String, PlayerState> e : state.getPlayers().entrySet()) {
-            PlayerState p = e.getValue();
-            // 브레인스톤 복귀 (함대 입장 등으로 가이아 구역에 있던 경우)
-            if ("GAIA".equals(p.getBrainstone())) {
-                p.setBrainstone("BOWL1");
+        for (String playerId : state.getPlayers().keySet()) {
+            // 파워 수입 순환 결정이 걸린 플레이어는 복귀를 결정 해소 뒤로 미룬다 —
+            // 가이아 복귀는 수입 순환 이후여야 복귀 토큰이 이번 수입에 순환되지 않는다 (룰 순서: 수입 → 가이아)
+            if (hasPendingIncomeOrder(state, playerId)) {
+                continue; // applyIncomePowerOrder에서 returnGaiaPower 호출
             }
-            if (p.getGaiaPower() <= 0) {
-                continue;
-            }
-            JsonNode faction = data.faction(p.getFaction());
-            // 아이타 PI(4개 이상): 종족 능력 페이즈의 ITARS_GAIA_TECH에서 처리 (잔여분 bowl1 복귀 포함)
-            if (hasAbility(faction, "PI_GAIA_4_TO_TECH_TILE")
-                    && builtCount(state, e.getKey(), "PLANETARY_INSTITUTE") > 0
-                    && p.getGaiaPower() >= 4) {
-                continue;
-            }
-            if (hasAbility(faction, "GAIA_POWER_RETURN_BOWL2")) {
-                if (hasAbility(faction, "PI_GAIA_TOKEN_CONVERT")
-                        && builtCount(state, e.getKey(), "PLANETARY_INSTITUTE") > 0) {
-                    state.getDecisionStack().add(new Decision(state.newDecisionId(),
-                            "TERRANS_GAIA_CONVERT", e.getKey(), Map.of("tokens", p.getGaiaPower())));
-                    continue; // 배분 결정 후 잔여분 bowl2 복귀
-                }
-                p.setBowl2(p.getBowl2() + p.getGaiaPower());
-            } else {
-                p.setBowl1(p.getBowl1() + p.getGaiaPower());
-            }
-            p.setGaiaPower(0);
+            returnGaiaPower(state, playerId);
         }
+    }
+
+    private boolean hasPendingIncomeOrder(GameState state, String playerId) {
+        return state.getDecisionStack().stream()
+                .anyMatch(d -> "INCOME_POWER_ORDER".equals(d.getType()) && playerId.equals(d.getTarget()));
+    }
+
+    /** 가이아 페이즈 몫의 개인별 복귀: 브레인스톤 + 가이아 구역 토큰 (테란은 bowl2·PI면 배분 결정) —
+     * 반드시 그 플레이어의 파워 수입 순환이 끝난 뒤 호출되어야 한다 */
+    private void returnGaiaPower(GameState state, String playerId) {
+        PlayerState p = state.player(playerId);
+        // 브레인스톤 복귀 (함대 입장 등으로 가이아 구역에 있던 경우)
+        if ("GAIA".equals(p.getBrainstone())) {
+            p.setBrainstone("BOWL1");
+        }
+        if (p.getGaiaPower() <= 0) {
+            return;
+        }
+        JsonNode faction = data.faction(p.getFaction());
+        // 아이타 PI(4개 이상): ITARS_GAIA_TECH 결정에서 처리 (잔여분 bowl1 복귀 포함)
+        if (hasAbility(faction, "PI_GAIA_4_TO_TECH_TILE")
+                && builtCount(state, playerId, "PLANETARY_INSTITUTE") > 0
+                && p.getGaiaPower() >= 4) {
+            return;
+        }
+        if (hasAbility(faction, "GAIA_POWER_RETURN_BOWL2")) {
+            if (hasAbility(faction, "PI_GAIA_TOKEN_CONVERT")
+                    && builtCount(state, playerId, "PLANETARY_INSTITUTE") > 0) {
+                state.getDecisionStack().add(new Decision(state.newDecisionId(),
+                        "TERRANS_GAIA_CONVERT", playerId, Map.of("tokens", p.getGaiaPower())));
+                return; // 배분 결정 후 잔여분 bowl2 복귀
+            }
+            p.setBowl2(p.getBowl2() + p.getGaiaPower());
+        } else {
+            p.setBowl1(p.getBowl1() + p.getGaiaPower());
+        }
+        p.setGaiaPower(0);
     }
 
     /** 테란 PI: 가이아 토큰 → 자원 배분 (1토큰=1c, 3토큰=1o, 4토큰=1q, 4토큰=1k), 잔여 bowl2 복귀 */
@@ -2635,6 +2654,16 @@ public class GameEngine {
             }
         }
         state.getDecisionStack().remove(top);
+
+        // 순환이 끝났으므로 미뤄둔 가이아 페이즈 복귀 수행 (가이아 복귀는 파워 수입 순환 이후)
+        returnGaiaPower(state, submit.playerId());
+        // 아이타 PI(4개 이상): 능력 페이즈에서 미룬 결정을 지금 푸시
+        JsonNode faction = faction(state, submit.playerId());
+        if (hasAbility(faction, "PI_GAIA_4_TO_TECH_TILE")
+                && builtCount(state, submit.playerId(), "PLANETARY_INSTITUTE") > 0
+                && p.getGaiaPower() >= 4) {
+            pushDecision(state, "ITARS_GAIA_TECH", submit.playerId(), Map.of("tokens", p.getGaiaPower()));
+        }
 
         return List.of(event("DECISION_RESOLVED", submit,
                 Map.of("resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), List.of()));
