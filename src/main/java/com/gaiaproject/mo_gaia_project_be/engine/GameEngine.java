@@ -1109,6 +1109,7 @@ public class GameEngine {
             case "HH_3C_ORE" -> hadschHallasConvert(state, submit.playerId(), 3, "ORE");
             case "HH_4C_KNOWLEDGE" -> hadschHallasConvert(state, submit.playerId(), 4, "KNOWLEDGE");
             case "HH_4C_QIC" -> hadschHallasConvert(state, submit.playerId(), 4, "QIC");
+            case "NEVLAS_1T_CREDIT2" -> nevlasTokenConvert(state, submit.playerId(), 1, 0, 2);
             case "NEVLAS_2T_ORE_CREDIT" -> nevlasTokenConvert(state, submit.playerId(), 2, 1, 1);
             case "NEVLAS_3T_ORE2" -> nevlasTokenConvert(state, submit.playerId(), 3, 2, 0);
             default -> throw new EngineException("알 수 없는 변환: " + conversion);
