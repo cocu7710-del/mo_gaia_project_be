@@ -302,7 +302,11 @@ class GameFleetTest {
         int qicBefore = p1.getQic();
 
         engine.apply(state, new GameEngine.Submit("p1", "ACTION_FLEET", null,
-                Map.of("actionId", "ECLIPSE_TECH", "track", "AI")));
+                Map.of("actionId", "ECLIPSE_TECH")));
+        // 트랙은 액션 확정 후 CHOOSE_TRACK_ADVANCE 결정으로 선택 (파이락 의회와 동일 플로우)
+        assertEquals("CHOOSE_TRACK_ADVANCE", state.topDecision().getType());
+        engine.apply(state, new GameEngine.Submit("p1", "CHOOSE_TRACK_ADVANCE", state.topDecision().getId(),
+                Map.of("track", "AI")));
 
         assertEquals(1, p1.track("AI"));
         assertEquals(qicBefore + 1, p1.getQic());           // AI 레벨 1 보상

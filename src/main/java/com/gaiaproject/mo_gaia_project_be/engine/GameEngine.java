@@ -315,6 +315,7 @@ public class GameEngine {
             hex.setParasiteOwner(submit.playerId());
             roundScore(state, p, "MINE_PLACED", 1);
             techMineBuildVp(p, "GAIA".equals(planet));
+            // 기생 광산은 초월 차원 보너스 VP 대상이 아니다 (C-2)
             newColonizationTriggers(state, submit.playerId(), newSector, false, hex.getSectorId()); // 기생은 행성 종류 미개척
             if (hasAbility(faction, "PI_PARASITE_MINE_KNOWLEDGE_2")
                     && builtCount(state, submit.playerId(), "PLANETARY_INSTITUTE") > 0) {
@@ -396,8 +397,20 @@ public class GameEngine {
                 gainVp(p, 2, "FACTION");
             }
         }
+        transcendentMineVp(p, planet);
         autoIncorporateIntoFederation(state, submit.playerId(), target);
         return pushLeechDecisions(state, submit.playerId(), target);
+    }
+
+    /**
+     * 초월 차원 행성에 광산 건설 시 보너스 VP (C-2).
+     * 셋업 초기 배치(applyInitialPlacement)는 이 경로를 타지 않으므로 제외된다 — 스페이스 자이언트·모웨이드 시작 광산은 VP 없음.
+     * 란티다 기생 광산도 제외 — 호출부(기생 분기)에서 부르지 않는다.
+     */
+    private void transcendentMineVp(PlayerState p, String planet) {
+        if ("TRANSCENDENT".equals(planet)) {
+            gainVp(p, data.constants().get("transcendentMineVp").asInt(), "TRANSCENDENT");
+        }
     }
 
     // ═══════════════ 업그레이드 (메인 액션) — 결정 연쇄 A3 ═══════════════

@@ -95,6 +95,75 @@ class GameEdgeRulesTest {
         assertTrue(e.getMessage().contains("가이아포머"));
     }
 
+    // ═══ 초월 차원 광산 건설 보너스 (C-2) ═══
+
+    @Test
+    void 초월_차원에_광산을_지으면_6VP를_받는다() {
+        GameState state = readyGame();
+        PlayerState p1 = state.player("p1");
+        String key = adjacentFreeHex(state, p1MineKey(state));
+        state.getHexes().get(key).setPlanet("TRANSCENDENT");
+        p1.setCredits(50);
+        p1.setOre(50);
+        int vpBefore = p1.getVp();
+
+        HexCoord target = HexCoord.parse(key);
+        engine.apply(state, new GameEngine.Submit("p1", "ACTION_BUILD_MINE", null,
+                Map.of("hexQ", target.q(), "hexR", target.r(), "qicForRange", 0)));
+
+        assertEquals("MINE", state.getHexes().get(key).getBuildingType());
+        assertEquals(6, (int) p1.getVpBreakdown().getOrDefault("TRANSCENDENT", 0));
+        assertTrue(p1.getVp() >= vpBefore + 6); // 라운드 점수 타일이 더해질 수 있음
+    }
+
+    @Test
+    void 란티다_기생_광산은_초월_차원이어도_VP를_주지_않는다() {
+        GameState state = GameSetup.create(data, 3L, List.of(
+                new GameSetup.PlayerSeat("p1", "LANTIDS"),
+                new GameSetup.PlayerSeat("p2", "GLEENS"),
+                new GameSetup.PlayerSeat("p3", "TERRANS"),
+                new GameSetup.PlayerSeat("p4", "NEVLAS")));
+        completeSetup(engine, data, state);
+        PlayerState p1 = state.player("p1");
+        p1.setCredits(50);
+        p1.setOre(50);
+
+        // p1 광산 옆 초월 차원 헥스에 상대(p2) 광산을 두고, 그 위에 기생 건설
+        String key = adjacentFreeHex(state, p1MineKey(state));
+        HexState hex = state.getHexes().get(key);
+        hex.setPlanet("TRANSCENDENT");
+        hex.setBuildingOwner("p2");
+        hex.setBuildingType("MINE");
+        int vpBefore = p1.getVp();
+
+        HexCoord target = HexCoord.parse(key);
+        state.setActivePlayer("p1");
+        engine.apply(state, new GameEngine.Submit("p1", "ACTION_BUILD_MINE", null,
+                Map.of("hexQ", target.q(), "hexR", target.r(), "qicForRange", 0)));
+
+        assertEquals("p1", hex.getParasiteOwner());
+        assertFalse(p1.getVpBreakdown().containsKey("TRANSCENDENT"));
+        assertTrue(p1.getVp() - vpBefore < 6); // 라운드 점수(광산 건설 2VP 등)만 가능
+    }
+
+    @Test
+    void 셋업_초기_광산은_초월_차원이어도_VP를_주지_않는다() {
+        GameState state = GameSetup.create(data, 11L, List.of(
+                new GameSetup.PlayerSeat("p1", "MOWEIDS"),        // 초월 차원 시작
+                new GameSetup.PlayerSeat("p2", "SPACE_GIANTS"),   // 초월 차원 시작
+                new GameSetup.PlayerSeat("p3", "GEODENS"),
+                new GameSetup.PlayerSeat("p4", "GLEENS")));
+        EngineTestSupport.playAllInitialMines(engine, data, state);
+
+        for (String pid : List.of("p1", "p2")) {
+            PlayerState p = state.player(pid);
+            assertEquals("TRANSCENDENT",
+                    state.getHexes().get(findHex(state, h -> pid.equals(h.getBuildingOwner()))).getPlanet());
+            assertEquals(10, p.getVp());
+            assertFalse(p.getVpBreakdown().containsKey("TRANSCENDENT"));
+        }
+    }
+
     // ═══ 6라운드 패스자 리치 (edge-cases §4) ═══
 
     @Test

@@ -5,6 +5,7 @@
   "rounds": 6,
   "terraformRing": ["TERRA", "VOLCANIC", "OXIDE", "DESERT", "SWAMP", "TITANIUM", "ICE"],
   "specialPlanetShovels": { "TRANSCENDENT": 3, "BLACK_PLANET": 3 },
+  "transcendentMineVp": 6,
   "buildings": {
     "MINE":                { "stock": 8, "power": 1, "cost": { "credits": 2, "ore": 1 } },
     "TRADING_STATION":     { "stock": 4, "power": 2, "cost": { "credits": 6, "ore": 2 }, "costNearOpponent": { "credits": 3, "ore": 2 } },
