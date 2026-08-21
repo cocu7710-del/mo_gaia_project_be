@@ -50,6 +50,8 @@ public class PlayerState {
     private List<String> tinkeroidsUsedTiles = new ArrayList<>();
     /** 팅커로이드: 이번 라운드 선택된 개인 액션 (미사용 시 null) */
     private String tinkeroidsCurrentAction;
+    /** 기술 타일 즉시 효과가 결정(무료 광산)을 밀어 넣어 미뤄둔 트랙 전진 — 그 연쇄가 끝난 뒤 적용 (F-8) */
+    private String pendingTechTrackAdvance;
     /** 종족 비딩값 — 최종 점수에서 차감 (decision-flows §4) */
     private int bidVp;
     /** 최종 순위 (1~4, 게임 종료 시 확정 — 동률이면 비딩값 적은 쪽 승리, 0=미확정) */

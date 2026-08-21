@@ -511,6 +511,7 @@ public class GameEngine {
         String chosenTrack = (String) submit.payload().get("techTrack");
 
         state.getDecisionStack().remove(top);
+        int stackBefore = state.getDecisionStack().size();
 
         String tileId;
         if (advanced) {
@@ -522,7 +523,13 @@ public class GameEngine {
         // 트랙 전진: 트랙 슬롯 타일 → 해당 트랙, COMMON/EXPANSION/고급 → 선택 트랙 (미지정 시 스킵)
         String advanceTarget = !advanced && TRACK_NAMES.contains(position) ? position : chosenTrack;
         if (advanceTarget != null) {
-            advanceTrackIfPossible(state, submit.playerId(), advanceTarget);
+            if (state.getDecisionStack().size() > stackBefore) {
+                // 즉시 효과가 결정(무료 광산)을 밀어 넣었으면 그 연쇄를 먼저 끝낸다 —
+                // 트랙 보상(QIC·사거리)을 그 광산에 앞당겨 쓰지 못하게 (순서: 타일 효과 → 트랙 전진)
+                p.setPendingTechTrackAdvance(advanceTarget);
+            } else {
+                advanceTrackIfPossible(state, submit.playerId(), advanceTarget);
+            }
         }
 
         return List.of(event("DECISION_RESOLVED", submit,
@@ -1772,9 +1779,20 @@ public class GameEngine {
         state.getDecisionStack().remove(top);
         List<Map<String, Object>> pushed = buildMineCore(state, submit,
                 intOf(submit.payload(), "qicForRange"), freeShovels, freeBuild, rangeBonus, planetOnly);
+        resolvePendingTechTrackAdvance(state, submit.playerId());
 
         return List.of(event("DECISION_RESOLVED", submit,
                 Map.of("resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), pushed));
+    }
+
+    /** 기술 타일 즉시 효과로 미뤄둔 트랙 전진을 적용 — 효과 연쇄(무료 광산)가 끝난 직후 호출 */
+    private void resolvePendingTechTrackAdvance(GameState state, String playerId) {
+        PlayerState p = state.player(playerId);
+        String track = p.getPendingTechTrackAdvance();
+        if (track != null) {
+            p.setPendingTechTrackAdvance(null);
+            advanceTrackIfPossible(state, playerId, track);
+        }
     }
 
     private List<EngineEvent> applyPlaceBlackPlanet(GameState state, Submit submit) {

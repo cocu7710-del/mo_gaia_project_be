@@ -164,6 +164,44 @@ class GameEdgeRulesTest {
         }
     }
 
+    // ═══ 기술 타일 즉시 효과 → 트랙 전진 순서 (F-8) ═══
+
+    @Test
+    void 타일_무료_광산은_트랙_전진보다_먼저_해소된다() {
+        GameState state = readyGame();
+        PlayerState p1 = state.player("p1");
+        p1.setCredits(50);
+        p1.setOre(50);
+
+        // BASIC_EXP_TILE_3(2삽 + 무료 광산)이 놓인 확장 슬롯 — 연결 함대 입장자만 획득 가능
+        String position = state.getBoard().getTechOffers().entrySet().stream()
+                .filter(e -> "BASIC_EXP_TILE_3".equals(e.getValue()))
+                .map(Map.Entry::getKey).findFirst().orElseThrow();
+        String ship = state.getBoard().getExpansionTechShips().get(position);
+        if (ship != null) {
+            p1.getFleetProbes().add(ship);
+        }
+        int navBefore = p1.track("NAVIGATION");
+
+        state.getDecisionStack().add(new Decision(state.newDecisionId(), "CHOOSE_TECH_TILE", "p1", Map.of()));
+        engine.apply(state, new GameEngine.Submit("p1", "CHOOSE_TECH_TILE", state.topDecision().getId(),
+                Map.of("position", position, "techTrack", "NAVIGATION")));
+
+        // 광산 배치가 먼저 — 이 시점엔 트랙 보상(QIC·사거리)을 아직 못 쓴다
+        assertEquals("PLACE_MINE", state.topDecision().getType());
+        assertEquals(navBefore, p1.track("NAVIGATION"));
+
+        String key = adjacentFreeHex(state, p1MineKey(state));
+        state.getHexes().get(key).setPlanet("ICE");
+        HexCoord target = HexCoord.parse(key);
+        engine.apply(state, new GameEngine.Submit("p1", "PLACE_MINE", state.topDecision().getId(),
+                Map.of("hexQ", target.q(), "hexR", target.r(), "qicForRange", 0)));
+
+        // 배치가 끝난 뒤에야 전진한다
+        assertEquals("MINE", state.getHexes().get(key).getBuildingType());
+        assertEquals(navBefore + 1, p1.track("NAVIGATION"));
+    }
+
     // ═══ 6라운드 패스자 리치 (edge-cases §4) ═══
 
     @Test
