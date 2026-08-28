@@ -77,6 +77,36 @@ class GameFactionDepthTest {
     }
 
     @Test
+    void 타클론_1파워_1크레딧_교환은_브레인스톤을_쓸_수_없다() {
+        GameState state = depthGame();
+        state.setActivePlayer("p2");
+        PlayerState p2 = state.player("p2");
+        p2.setBrainstone("BOWL3");
+
+        EngineException ex = assertThrows(EngineException.class, () -> engine.apply(state,
+                new GameEngine.Submit("p2", "ACTION_FREE", null,
+                        Map.of("conversion", "PW1_CREDIT", "useBrainstone", true))));
+        assertTrue(ex.getMessage().contains("브레인스톤"));
+        assertEquals("BOWL3", p2.getBrainstone()); // 거부됐으니 그대로
+    }
+
+    @Test
+    void 타클론_전용_교환은_브레인스톤_3파워로_크레딧_3을_준다() {
+        GameState state = depthGame();
+        state.setActivePlayer("p2");
+        PlayerState p2 = state.player("p2");
+        p2.setBrainstone("BOWL3");
+        p2.setBowl3(0);
+        int creditsBefore = p2.getCredits();
+
+        engine.apply(state, new GameEngine.Submit("p2", "ACTION_FREE", null,
+                Map.of("conversion", "TAKLONS_BRAINSTONE_CREDIT3", "useBrainstone", true)));
+
+        assertEquals("BOWL1", p2.getBrainstone());
+        assertEquals(creditsBefore + 3, p2.getCredits());
+    }
+
+    @Test
     void 타클론_PI는_리치_수락_시_토큰을_추가로_받고_1파워도_수동이다() {
         GameState state = depthGame();
         // p2(타클론)에 PI 배치

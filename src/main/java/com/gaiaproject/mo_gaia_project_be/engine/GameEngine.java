@@ -1069,8 +1069,18 @@ public class GameEngine {
             // 표준 변환
             case "BURN" -> burnPower(p, faction);
             case "PW1_CREDIT" -> {
-                spendPower(p, 1, useBrainstone, nevlasPiDouble(state, submit.playerId()));
+                // 브레인스톤(3파워 가치) 사용은 금지 — 1만 쓰고 2파워를 낭비하게 되므로,
+                // 그 경우엔 전용 변환 TAKLONS_BRAINSTONE_CREDIT3(3파워→크레딧3)을 쓴다
+                if (useBrainstone) {
+                    throw new EngineException("이 변환은 브레인스톤으로 사용할 수 없습니다 — 3파워→크레딧3 변환을 사용하세요");
+                }
+                spendPower(p, 1, false, nevlasPiDouble(state, submit.playerId()));
                 p.setCredits(p.getCredits() + 1);
+            }
+            case "TAKLONS_BRAINSTONE_CREDIT3" -> {
+                requireFactionAbility(faction, "BRAINSTONE");
+                spendPower(p, 3, true, false);
+                p.setCredits(p.getCredits() + 3);
             }
             case "PW3_ORE" -> {
                 spendPower(p, 3, useBrainstone, nevlasPiDouble(state, submit.playerId()));
