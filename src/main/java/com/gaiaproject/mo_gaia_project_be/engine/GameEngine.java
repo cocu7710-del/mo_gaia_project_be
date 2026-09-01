@@ -1082,16 +1082,41 @@ public class GameEngine {
                 spendPower(p, 3, true, false);
                 p.setCredits(p.getCredits() + 3);
             }
+            case "TAKLONS_BRAINSTONE_ORE1" -> {
+                requireFactionAbility(faction, "BRAINSTONE");
+                spendPower(p, 3, true, false); // 브레인스톤 단독(잔여 없음, PW3_ORE와 동일 비율)
+                p.setOre(p.getOre() + 1);
+            }
+            case "TAKLONS_BRAINSTONE_KNOWLEDGE1" -> {
+                requireFactionAbility(faction, "BRAINSTONE");
+                spendPower(p, 4, true, false); // 브레인스톤 + Ⅲ구역 일반 토큰 1개(PW4_KNOWLEDGE와 동일 비율)
+                p.setKnowledge(p.getKnowledge() + 1);
+            }
+            case "TAKLONS_BRAINSTONE_QIC1" -> {
+                requireFactionAbility(faction, "BRAINSTONE");
+                spendPower(p, 4, true, false); // 브레인스톤 + Ⅲ구역 일반 토큰 1개(PW4_QIC와 동일 비율)
+                addQic(state, submit.playerId(), 1);
+            }
+            // 표준 파워 교환(PW3_ORE/PW4_KNOWLEDGE/PW4_QIC)은 브레인스톤 사용 금지 — 낭비 없는 전용 변환을 위 별도 id로 제공
             case "PW3_ORE" -> {
-                spendPower(p, 3, useBrainstone, nevlasPiDouble(state, submit.playerId()));
+                if (useBrainstone) {
+                    throw new EngineException("이 변환은 브레인스톤으로 사용할 수 없습니다 — 브레인스톤→광석1 변환을 사용하세요");
+                }
+                spendPower(p, 3, false, nevlasPiDouble(state, submit.playerId()));
                 p.setOre(p.getOre() + 1);
             }
             case "PW4_KNOWLEDGE" -> {
-                spendPower(p, 4, useBrainstone, nevlasPiDouble(state, submit.playerId()));
+                if (useBrainstone) {
+                    throw new EngineException("이 변환은 브레인스톤으로 사용할 수 없습니다 — 브레인스톤→지식1 변환을 사용하세요");
+                }
+                spendPower(p, 4, false, nevlasPiDouble(state, submit.playerId()));
                 p.setKnowledge(p.getKnowledge() + 1);
             }
             case "PW4_QIC" -> {
-                spendPower(p, 4, useBrainstone, nevlasPiDouble(state, submit.playerId()));
+                if (useBrainstone) {
+                    throw new EngineException("이 변환은 브레인스톤으로 사용할 수 없습니다 — 브레인스톤→QIC1 변환을 사용하세요");
+                }
+                spendPower(p, 4, false, nevlasPiDouble(state, submit.playerId()));
                 addQic(state, submit.playerId(), 1);
             }
             case "KNOWLEDGE_CREDIT" -> {

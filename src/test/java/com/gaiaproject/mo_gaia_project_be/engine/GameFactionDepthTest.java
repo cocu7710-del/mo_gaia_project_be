@@ -107,6 +107,54 @@ class GameFactionDepthTest {
     }
 
     @Test
+    void 타클론_표준_파워3_광석_교환도_브레인스톤을_쓸_수_없다() {
+        GameState state = depthGame();
+        state.setActivePlayer("p2");
+        PlayerState p2 = state.player("p2");
+        p2.setBrainstone("BOWL3");
+
+        EngineException ex = assertThrows(EngineException.class, () -> engine.apply(state,
+                new GameEngine.Submit("p2", "ACTION_FREE", null,
+                        Map.of("conversion", "PW3_ORE", "useBrainstone", true))));
+        assertTrue(ex.getMessage().contains("브레인스톤"));
+        assertEquals("BOWL3", p2.getBrainstone());
+    }
+
+    @Test
+    void 타클론_전용_교환은_브레인스톤_단독으로_광석1을_낭비_없이_준다() {
+        GameState state = depthGame();
+        state.setActivePlayer("p2");
+        PlayerState p2 = state.player("p2");
+        p2.setBrainstone("BOWL3");
+        p2.setBowl3(3); // 일반 토큰은 그대로 남아야 함 — 브레인스톤만 소모
+        int oreBefore = p2.getOre();
+
+        engine.apply(state, new GameEngine.Submit("p2", "ACTION_FREE", null,
+                Map.of("conversion", "TAKLONS_BRAINSTONE_ORE1", "useBrainstone", true)));
+
+        assertEquals("BOWL1", p2.getBrainstone());
+        assertEquals(3, p2.getBowl3()); // 낭비 없음 — 일반 토큰 소모 없음
+        assertEquals(oreBefore + 1, p2.getOre());
+    }
+
+    @Test
+    void 타클론_전용_교환은_브레인스톤과_일반_토큰_1개로_지식1을_준다() {
+        GameState state = depthGame();
+        state.setActivePlayer("p2");
+        PlayerState p2 = state.player("p2");
+        p2.setBrainstone("BOWL3");
+        p2.setBowl3(1);
+        int knowledgeBefore = p2.getKnowledge();
+
+        engine.apply(state, new GameEngine.Submit("p2", "ACTION_FREE", null,
+                Map.of("conversion", "TAKLONS_BRAINSTONE_KNOWLEDGE1", "useBrainstone", true)));
+
+        assertEquals("BOWL1", p2.getBrainstone());
+        assertEquals(0, p2.getBowl3()); // 일반 토큰 1개도 함께 소모(브레인스톤3+토큰1=4)
+        assertEquals(knowledgeBefore + 1, p2.getKnowledge());
+    }
+
+    @Test
     void 타클론_PI는_리치_수락_시_토큰을_추가로_받고_1파워도_수동이다() {
         GameState state = depthGame();
         // p2(타클론)에 PI 배치
