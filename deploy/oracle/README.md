@@ -68,6 +68,24 @@ sudo docker compose down        # 전체 중지 (DB 데이터는 볼륨에 유�
 - DB 데이터는 `gaia-pgdata` 도커 볼륨에 저장 — 컨테이너 재빌드해도 유지
 - DB 비밀번호를 바꾸려면 `deploy/oracle/.env`에 `DB_PASSWORD=...` 작성 후 `docker compose up -d` (최초 기동 전에 정하는 것을 권장)
 
+## 사용량 확인 (Always Free 한도 초과 여부)
+
+Always Free 한도를 넘어도 자동 청구되지 않고 그 작업만 거부된다 — 그래도 여유를 보고 싶으면:
+
+### VM 안에서 (SSH 접속 후)
+
+```bash
+htop              # CPU·메모리 실시간 사용률 (q로 종료)
+df -h              # 디스크(스토리지) 사용량
+sudo docker stats  # DB·앱 컨테이너별 자원 사용량 (Ctrl+C로 종료)
+```
+
+### 오라클 콘솔에서
+
+- ☰ → **Billing & Cost Management → Cost Analysis** — 실제 청구 금액 (Always Free만 쓰면 $0 유지)
+- ☰ → **Governance & Administration → Limits, Quotas and Usage** — 인스턴스 수·OCPU·스토리지 등 Always Free 한도 대비 실사용량
+- **Cost Management → Budgets** — 예산 알림 설정(선택) — 유료 전환 실수 시 이메일 경고
+
 ## 마이그레이션 마무리 (오라클 정상 확인 후)
 
 1. Render 대시보드에서 서비스 Suspend/Delete
