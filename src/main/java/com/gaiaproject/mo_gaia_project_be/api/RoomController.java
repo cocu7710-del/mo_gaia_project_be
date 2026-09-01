@@ -49,6 +49,13 @@ public class RoomController {
 
     @PostMapping
     public RoomService.RoomView create(@Valid @RequestBody CreateRoomRequest request, Authentication auth) {
+        // 멀티플레이·비딩 모드 b는 아직 테스트 전이라 API 레벨에서도 차단 (FE UI 우회 방지)
+        if (!Boolean.TRUE.equals(request.localMode())) {
+            throw new IllegalArgumentException("멀티플레이는 아직 테스트 전이라 생성할 수 없습니다 (1인 플레이만 가능)");
+        }
+        if ("PICK".equals(request.bidMode())) {
+            throw new IllegalArgumentException("비딩 모드 b는 아직 테스트 전이라 사용할 수 없습니다");
+        }
         return rooms.createRoom(currentUserId(auth), request.name(),
                 new GameService.GameOptions(Boolean.TRUE.equals(request.bidding()), request.undoPolicy(),
                         request.leechTimerSeconds(), request.bidMode(), Boolean.TRUE.equals(request.localMode())),
