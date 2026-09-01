@@ -1,6 +1,8 @@
-# 오라클 클라우드 Always Free VM 운영용 — DB + 앱(FE 포함)을 한 VM에서 구동
+# 오라클 클라우드 Always Free VM 운영용 — DB + 앱(FE 포함) + Caddy(HTTPS)를 한 VM에서 구동
 # 사용: sudo docker compose up -d --build  (초기 설정은 setup.sh, 갱신은 redeploy.sh)
-# DB 비밀번호 변경 시: 같은 폴더에 .env 파일로 DB_PASSWORD=... 지정 (DB는 외부 미노출)
+# .env 파일로 설정 (같은 폴더, 최초 1회):
+#   DB_PASSWORD=...                 DB는 외부 미노출이라 기본값(gaia)도 무방
+#   DOMAIN=your-name.duckdns.org    HTTPS 적용할 도메인 (DuckDNS 등 무료 도메인, 필수 — README HTTPS 섹션 참조)
 services:
   db:
     image: postgres:16-alpine
@@ -30,8 +32,26 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-gaia}
       # 기본은 A1 VM(램 6GB+) 기준. 저사양(E2.1.Micro 1GB)은 setup.sh가 .env로 축소값을 지정
       JAVA_OPTS: ${JAVA_OPTS:--Xmx2g}
+    # 외부에 직접 노출하지 않음 — caddy가 80/443을 받아서 내부적으로 이 컨테이너(app:8080)로 중계
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      # DOMAIN 미설정 시 IP로 폴백 — Caddy는 IP 주소엔 자동 인증서를 시도하지 않고 평범한 HTTP로 서비스한다
+      # (DOMAIN 설정 전에 실수로 재배포해도 사이트가 안 죽도록 하는 안전장치)
+      DOMAIN: ${DOMAIN:-161.33.131.190}
     ports:
-      - "80:8080"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
 
 volumes:
   gaia-pgdata:
+  caddy-data:
+  caddy-config:

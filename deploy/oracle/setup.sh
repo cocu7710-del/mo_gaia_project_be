@@ -9,10 +9,12 @@ if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sudo sh
 fi
 
-# 2. 인스턴스 방화벽 80 포트 개방 — OCI Ubuntu 이미지는 iptables 기본 REJECT 규칙이 있음
-if ! sudo iptables -C INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null; then
-  sudo iptables -I INPUT 5 -p tcp --dport 80 -j ACCEPT
-fi
+# 2. 인스턴스 방화벽 80·443 포트 개방 — OCI Ubuntu 이미지는 iptables 기본 REJECT 규칙이 있음
+for port in 80 443; do
+  if ! sudo iptables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null; then
+    sudo iptables -I INPUT 5 -p tcp --dport "$port" -j ACCEPT
+  fi
+done
 sudo netfilter-persistent save 2>/dev/null || true
 
 # 3. 소스 클론 (이미 있으면 갱신)
@@ -23,6 +25,9 @@ else
 fi
 
 # 4. 저사양 VM(E2.1.Micro 1GB) 대비 — 램 2GB 미만이면 스왑 2GB 생성 + JVM 상한 축소
+# .env는 DOMAIN·DB_PASSWORD 등 사용자 설정도 담기므로 덮어쓰지 않고 없는 줄만 추가한다
+ENV_FILE="$HOME/mo_gaia_project_be/deploy/oracle/.env"
+touch "$ENV_FILE"
 mem_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
 if [ "$mem_kb" -lt 2000000 ]; then
   if [ ! -f /swapfile ]; then
@@ -32,7 +37,7 @@ if [ "$mem_kb" -lt 2000000 ]; then
     sudo swapon /swapfile
     echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
   fi
-  echo 'JAVA_OPTS=-Xmx256m -XX:MaxMetaspaceSize=160m -Xss512k' > "$HOME/mo_gaia_project_be/deploy/oracle/.env"
+  grep -q '^JAVA_OPTS=' "$ENV_FILE" || echo 'JAVA_OPTS=-Xmx256m -XX:MaxMetaspaceSize=160m -Xss512k' >> "$ENV_FILE"
 fi
 
 # 5. 빌드 + 기동 (부팅 시 자동 재시작: restart: unless-stopped)

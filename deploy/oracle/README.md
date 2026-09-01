@@ -86,8 +86,34 @@ sudo docker stats  # DB·앱 컨테이너별 자원 사용량 (Ctrl+C로 종료)
 - ☰ → **Governance & Administration → Limits, Quotas and Usage** — 인스턴스 수·OCPU·스토리지 등 Always Free 한도 대비 실사용량
 - **Cost Management → Budgets** — 예산 알림 설정(선택) — 유료 전환 실수 시 이메일 경고
 
+## HTTPS 적용 (DuckDNS 무료 도메인 + Caddy 자동 인증서)
+
+`docker-compose.yml`에 이미 `caddy` 서비스가 구성돼 있다 — Let's Encrypt 인증서를 자동 발급·갱신한다.
+
+### 1. 무료 도메인 발급 (사용자가 직접, 브라우저)
+
+1. https://www.duckdns.org 접속 → 로그인(Google/GitHub 등)
+2. 원하는 서브도메인 입력 후 **add domain** (예: `gaia-project` → `gaia-project.duckdns.org`)
+3. **current ip**를 VM 공인 IP(`161.33.131.190`)로 입력 → **update ip**
+
+### 2. 클라우드 방화벽 443 포트 개방
+
+인스턴스 상세 → Virtual cloud network → Security Lists → Default Security List → **Add Ingress Rules**:
+- Source CIDR: `0.0.0.0/0` / IP Protocol: `TCP` / Destination Port Range: `443`
+
+### 3. VM에서 도메인 설정 + 재배포
+
+```bash
+cd ~/mo_gaia_project_be/deploy/oracle
+echo "DOMAIN=gaia-project.duckdns.org" >> .env   # 1번에서 만든 실제 도메인으로
+bash redeploy.sh
+```
+
+(기존 VM은 setup.sh가 80 포트만 열어뒀을 수 있음 — 443이 하나도 안 열려 있다면 한 번만: `sudo iptables -I INPUT 5 -p tcp --dport 443 -j ACCEPT && sudo netfilter-persistent save`)
+
+1~2분 뒤 `https://gaia-project.duckdns.org` 로 접속 — 자물쇠 아이콘 뜨면 완료. `http://`로 접속해도 caddy가 자동으로 `https://`로 리다이렉트한다.
+
 ## 마이그레이션 마무리 (오라클 정상 확인 후)
 
 1. Render 대시보드에서 서비스 Suspend/Delete
 2. Neon 프로젝트 삭제 (기존 게임 데이터를 옮길 필요가 있으면 삭제 전에 `pg_dump` → VM에서 restore)
-3. HTTPS가 필요해지면: DuckDNS 무료 도메인 + Caddy 컨테이너 추가 (요청 시 구성해줌)

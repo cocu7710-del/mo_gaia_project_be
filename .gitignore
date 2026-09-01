@@ -35,3 +35,6 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### 배포 시크릿 (DB_PASSWORD·DOMAIN 등, VM에만 존재) ###
+deploy/oracle/.env
