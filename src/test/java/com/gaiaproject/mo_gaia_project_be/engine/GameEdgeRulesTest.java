@@ -164,6 +164,71 @@ class GameEdgeRulesTest {
         }
     }
 
+    // ═══ 인공물 ⑦⑧ — 홈 행성과 같은 가상 종류는 "새 행성 종류" 중복 발동 금지 ═══
+
+    @Test
+    void 스페이스_자이언트가_인공물_8을_획득해도_홈이_초월차원이라_새_종류_점수는_안_받는다() {
+        GameState state = GameSetup.create(data, 11L, List.of(
+                new GameSetup.PlayerSeat("p1", "SPACE_GIANTS"), // 초월 차원 시작 — 이미 개척된 종류
+                new GameSetup.PlayerSeat("p2", "GEODENS"),
+                new GameSetup.PlayerSeat("p3", "GLEENS"),
+                new GameSetup.PlayerSeat("p4", "TERRANS")));
+        completeSetup(engine, data, state);
+        state.getBoard().getRoundScoringTiles().set(0, "ROUND_TILE_NEW_PLANET_TYPE"); // 1라운드 = 새 행성 종류 3VP
+        state.getBoard().getArtifactOffers().put("ARTIFACT_8", null);
+        state.getDecisionStack().add(new Decision(state.newDecisionId(), "CHOOSE_ARTIFACT", "p1", Map.of()));
+        PlayerState p1 = state.player("p1");
+        int vpBefore = p1.getVp();
+
+        engine.apply(state, new GameEngine.Submit("p1", "CHOOSE_ARTIFACT", state.topDecision().getId(),
+                Map.of("artifact", "ARTIFACT_8")));
+
+        assertEquals(vpBefore + 7, p1.getVp()); // 인공물 고정 7VP만 — 새 종류 3VP 중복 없음
+        assertEquals(0, p1.getVpBreakdown().getOrDefault("ROUND_1", 0));
+    }
+
+    @Test
+    void 팅커로이드가_인공물_7을_획득해도_홈이_소행성이라_새_종류_점수는_안_받는다() {
+        GameState state = GameSetup.create(data, 11L, List.of(
+                new GameSetup.PlayerSeat("p1", "TINKEROIDS"), // 소행성 시작 — 이미 개척된 종류
+                new GameSetup.PlayerSeat("p2", "GEODENS"),
+                new GameSetup.PlayerSeat("p3", "GLEENS"),
+                new GameSetup.PlayerSeat("p4", "TERRANS")));
+        completeSetup(engine, data, state);
+        state.getBoard().getRoundScoringTiles().set(0, "ROUND_TILE_NEW_PLANET_TYPE");
+        state.getBoard().getArtifactOffers().put("ARTIFACT_7", null);
+        state.getDecisionStack().add(new Decision(state.newDecisionId(), "CHOOSE_ARTIFACT", "p1", Map.of()));
+        PlayerState p1 = state.player("p1");
+        int vpBefore = p1.getVp();
+
+        engine.apply(state, new GameEngine.Submit("p1", "CHOOSE_ARTIFACT", state.topDecision().getId(),
+                Map.of("artifact", "ARTIFACT_7")));
+
+        assertEquals(vpBefore + 7, p1.getVp());
+        assertEquals(0, p1.getVpBreakdown().getOrDefault("ROUND_1", 0));
+    }
+
+    @Test
+    void 홈이_초월차원이_아닌_종족은_인공물_8_획득시_새_종류_점수도_받는다() {
+        GameState state = GameSetup.create(data, 11L, List.of(
+                new GameSetup.PlayerSeat("p1", "GEODENS"), // 초월 차원 미개척 상태
+                new GameSetup.PlayerSeat("p2", "GLEENS"),
+                new GameSetup.PlayerSeat("p3", "TERRANS"),
+                new GameSetup.PlayerSeat("p4", "IVITS")));
+        completeSetup(engine, data, state);
+        state.getBoard().getRoundScoringTiles().set(0, "ROUND_TILE_NEW_PLANET_TYPE");
+        state.getBoard().getArtifactOffers().put("ARTIFACT_8", null);
+        state.getDecisionStack().add(new Decision(state.newDecisionId(), "CHOOSE_ARTIFACT", "p1", Map.of()));
+        PlayerState p1 = state.player("p1");
+        int vpBefore = p1.getVp();
+
+        engine.apply(state, new GameEngine.Submit("p1", "CHOOSE_ARTIFACT", state.topDecision().getId(),
+                Map.of("artifact", "ARTIFACT_8")));
+
+        assertEquals(vpBefore + 10, p1.getVp()); // 7(인공물 고정) + 3(새 종류)
+        assertEquals(3, p1.getVpBreakdown().getOrDefault("ROUND_1", 0));
+    }
+
     // ═══ 기술 타일 즉시 효과 → 트랙 전진 순서 (F-8) ═══
 
     @Test

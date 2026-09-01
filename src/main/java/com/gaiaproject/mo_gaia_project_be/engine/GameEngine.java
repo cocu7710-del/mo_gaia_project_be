@@ -1725,12 +1725,24 @@ public class GameEngine {
         }
         switch (artifact.path("special").asText("")) {
             case "VP_3_PER_DEEP_SECTOR_WITH_BUILDING" -> gainVp(p, 3 * deepSectorsWithBuilding(state, submit.playerId()), "ARTIFACT");
-            case "VP_7_ASTEROIDS_AS_PLANET_TYPE_BUILDING_PLUS_1",
-                 "VP_7_TRANSCENDENT_AS_PLANET_TYPE_BUILDING_PLUS_1" -> {
+            case "VP_7_ASTEROIDS_AS_PLANET_TYPE_BUILDING_PLUS_1" -> {
                 gainVp(p, 7, "ARTIFACT");
                 // 획득 = 가상 광산 건설 행동 취급 (H-3): 라운드 점수 + 건설 VP 타일 발동, 수입·재고·리치는 무관
                 roundScore(state, p, "MINE_PLACED", 1);
-                roundScore(state, p, "NEW_PLANET_TYPE_COLONIZED", 1); // 가상 행성 종류 +1 = 새 종류 개척 취급
+                // 가상 행성 종류 추가는 실제로 처음 개척하는 종류일 때만 "새 종류" 발동 —
+                // 소행성이 홈 행성인 종족(팅커로이드·다카니안)은 이미 개척된 종류라 중복 발동하면 안 된다
+                if (!colonizedPlanetTypes(state, submit.playerId()).contains("ASTEROIDS")) {
+                    roundScore(state, p, "NEW_PLANET_TYPE_COLONIZED", 1);
+                }
+                techMineBuildVp(p, false);
+            }
+            case "VP_7_TRANSCENDENT_AS_PLANET_TYPE_BUILDING_PLUS_1" -> {
+                gainVp(p, 7, "ARTIFACT");
+                roundScore(state, p, "MINE_PLACED", 1);
+                // 초월 차원이 홈 행성인 종족(스페이스 자이언트·모웨이드)은 이미 개척된 종류라 중복 발동하면 안 된다
+                if (!colonizedPlanetTypes(state, submit.playerId()).contains("TRANSCENDENT")) {
+                    roundScore(state, p, "NEW_PLANET_TYPE_COLONIZED", 1);
+                }
                 techMineBuildVp(p, false);
             }
             case "VP_3_PER_SCIENCE_LEVEL" -> gainVp(p, 3 * p.track("SCIENCE"), "ARTIFACT");
