@@ -42,8 +42,8 @@
     { "id": "BASIC_EXP_TILE_3", "type": "IMMEDIATE", "desc": "삽2 무료 광산 건설",     "special": "TERRAFORM_2_PLACE_MINE", "expansion": true }
   ],
   "advancedTiles": [
-    { "id": "ADV_TILE_1",  "type": "IMMEDIATE", "desc": "기본 섹터 내 건물당 2vp",     "special": "VP_2_PER_BUILDING_IN_SECTORS" },
-    { "id": "ADV_TILE_2",  "type": "IMMEDIATE", "desc": "기본 섹터 내 건물당 1o",      "special": "ORE_1_PER_BUILDING_IN_SECTORS" },
+    { "id": "ADV_TILE_1",  "type": "IMMEDIATE", "desc": "건물 있는 기본 섹터당 2vp",   "special": "VP_2_PER_BUILDING_IN_SECTORS" },
+    { "id": "ADV_TILE_2",  "type": "IMMEDIATE", "desc": "건물 있는 기본 섹터당 1o",    "special": "ORE_1_PER_BUILDING_IN_SECTORS" },
     { "id": "ADV_TILE_3",  "type": "IMMEDIATE", "desc": "광산당 2vp",                  "special": "VP_2_PER_MINE" },
     { "id": "ADV_TILE_4",  "type": "IMMEDIATE", "desc": "교역소당 4vp",                "special": "VP_4_PER_TRADING_STATION" },
     { "id": "ADV_TILE_5",  "type": "IMMEDIATE", "desc": "연방 토큰당 5vp",             "special": "VP_5_PER_FEDERATION_TOKEN" },

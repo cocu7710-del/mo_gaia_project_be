@@ -85,6 +85,12 @@ public class RoomController {
         return rooms.listSpectatable(currentUserId(auth));
     }
 
+    /** 로비 완료 탭 — 내가 참가했던 완료 게임 (나간 뒤 다시 들어가 최종 결과 확인) */
+    @GetMapping("/finished")
+    public List<RoomService.RoomView> finished(Authentication auth) {
+        return rooms.listMyFinished(currentUserId(auth));
+    }
+
     /** 방장 전용 — 시작 전 멤버 강퇴 */
     @PostMapping("/{roomId}/kick")
     public RoomService.RoomView kick(@PathVariable UUID roomId,

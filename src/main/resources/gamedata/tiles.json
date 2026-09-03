@@ -11,7 +11,7 @@
     { "id": "BOOSTER_8",  "desc": "4c 수입 · 패스: 가이아 행성당 1vp",     "income": { "credits": 4 }, "passVp": { "per": "GAIA_PLANET", "vp": 1 } },
     { "id": "BOOSTER_9",  "desc": "1o 수입 · 패스: 행성 종류당 1vp",       "income": { "ore": 1 }, "passVp": { "per": "PLANET_TYPE", "vp": 1 } },
     { "id": "BOOSTER_10", "desc": "1o 수입 · 패스: 가이아포머당 3vp",      "income": { "ore": 1 }, "passVp": { "per": "GAIAFORMER", "vp": 3 } },
-    { "id": "BOOSTER_11", "desc": "3c 수입 · 패스: 깊은 구역 건물당 2vp",  "income": { "credits": 3 }, "passVp": { "per": "DEEP_SECTOR_BUILDING", "vp": 2 }, "expansion": true },
+    { "id": "BOOSTER_11", "desc": "3c 수입 · 패스: 건물 있는 깊은 구역당 2vp",  "income": { "credits": 3 }, "passVp": { "per": "DEEP_SECTOR_BUILDING", "vp": 2 }, "expansion": true },
     { "id": "BOOSTER_12", "desc": "차징2 수입 · 액션: 즉시 가이아포밍",    "income": { "powerCharge": 2 }, "action": "PLACE_GAIAFORMER_INSTANT", "expansion": true },
     { "id": "BOOSTER_13", "desc": "차징2 수입 · 액션: 거리 +3 광산 건설",  "income": { "powerCharge": 2 }, "action": "BUILD_MINE_RANGE_PLUS_3", "expansion": true },
     { "id": "BOOSTER_14", "desc": "2c 수입 · 액션: 삽1 광산 건설",         "income": { "credits": 2 }, "action": "BUILD_MINE_TERRAFORM_1_FREE", "expansion": true }

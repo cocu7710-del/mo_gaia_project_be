@@ -9,6 +9,8 @@ import com.gaiaproject.mo_gaia_project_be.engine.rules.GameData;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -383,5 +385,84 @@ class GameEngineUpgradeTest {
                 Map.of("hexQ", lab.q(), "hexR", lab.r(), "to", "ACADEMY", "academyType", "QIC")));
         assertEquals("ACADEMY", state.getHexes().get(labKey).getBuildingType());
         assertEquals("QIC", state.getHexes().get(labKey).getAcademyType());
+    }
+
+    @Test
+    void 고급타일_섹터당_보너스는_건물_수가_아니라_섹터_수로_계산된다() {
+        GameState state = readyGame();
+        PlayerState p1 = state.player("p1");
+        p1.getTechTiles().add("BASIC_TILE_3");
+        p1.getFederationTokens().add("FED_TILE_2");
+
+        // 같은 기본 섹터 안에 건물 2개 — 섹터 수로 세면 1이어야 함(건물 수로 세면 2)
+        String sectorId = state.getHexes().values().stream()
+                .filter(h -> h.getSectorId() != null && h.getSectorId().startsWith("SECTOR_"))
+                .map(HexState::getSectorId).findFirst().orElseThrow();
+        List<String> sameSectorKeys = state.getHexes().entrySet().stream()
+                .filter(e -> sectorId.equals(e.getValue().getSectorId()) && !e.getValue().hasBuilding())
+                .map(Map.Entry::getKey).limit(2).toList();
+        assertEquals(2, sameSectorKeys.size());
+        for (String key : sameSectorKeys) {
+            state.getHexes().get(key).setBuildingOwner("p1");
+            state.getHexes().get(key).setBuildingType("MINE");
+        }
+
+        // 딥 섹터에도 건물 1개 — "기본 섹터" 집계에는 포함되면 안 됨
+        String deepKey = findHex(state, h -> h.getSectorId() != null && h.getSectorId().startsWith("DEEP_") && !h.hasBuilding());
+        state.getHexes().get(deepKey).setBuildingOwner("p1");
+        state.getHexes().get(deepKey).setBuildingType("MINE");
+
+        p1.getTracks().put("SCIENCE", 4);
+        state.getBoard().getAdvTechOffers().put("SCIENCE", "ADV_TILE_2"); // 건물 있는 기본 섹터당 1o
+        int oreBefore = p1.getOre();
+        // "기본 섹터당" 정답값 — p1이 건물을 가진 기본 섹터의 '개수'(중복 제거). 방금 만든 한 섹터 2건물 때문에
+        // 건물 수로 잘못 세면 이 값보다 커진다 (버그: 건물 수 그대로 합산)
+        long expectedSectors = state.getHexes().values().stream()
+                .filter(h -> "p1".equals(h.getBuildingOwner()) && !"GAIAFORMER".equals(h.getBuildingType()))
+                .filter(h -> h.getSectorId() != null && h.getSectorId().startsWith("SECTOR_"))
+                .map(HexState::getSectorId).distinct().count();
+
+        state.getDecisionStack().add(new Decision(state.newDecisionId(), "CHOOSE_TECH_TILE", "p1", Map.of()));
+        engine.apply(state, new GameEngine.Submit("p1", "CHOOSE_TECH_TILE", state.topDecision().getId(),
+                Map.of("position", "SCIENCE", "advanced", true, "coveredTile", "BASIC_TILE_3")));
+
+        assertEquals(oreBefore + expectedSectors, p1.getOre());
+    }
+
+    @Test
+    void 부스터11_패스_보너스는_건물_수가_아니라_딥섹터_수로_계산된다() {
+        GameState state = readyGame();
+        PlayerState p1 = state.player("p1");
+        p1.setBooster("BOOSTER_11");
+
+        Map<String, List<String>> deepSectorGroups = new LinkedHashMap<>();
+        for (Map.Entry<String, HexState> e : state.getHexes().entrySet()) {
+            String sid = e.getValue().getSectorId();
+            if (sid != null && sid.startsWith("DEEP_") && !e.getValue().hasBuilding()) {
+                deepSectorGroups.computeIfAbsent(sid, k -> new ArrayList<>()).add(e.getKey());
+            }
+        }
+        List<String> sectorIds = new ArrayList<>(deepSectorGroups.keySet());
+        assertTrue(sectorIds.size() >= 2);
+
+        // 첫 딥 섹터엔 건물 2개(같은 섹터 중복 제거 확인용)
+        List<String> firstKeys = deepSectorGroups.get(sectorIds.get(0));
+        assertTrue(firstKeys.size() >= 2);
+        for (String key : firstKeys.subList(0, 2)) {
+            state.getHexes().get(key).setBuildingOwner("p1");
+            state.getHexes().get(key).setBuildingType("MINE");
+        }
+        // 두 번째 딥 섹터엔 건물 1개
+        String secondKey = deepSectorGroups.get(sectorIds.get(1)).get(0);
+        state.getHexes().get(secondKey).setBuildingOwner("p1");
+        state.getHexes().get(secondKey).setBuildingType("MINE");
+
+        String freeBooster = state.getBoard().getBoosterHolders().entrySet().stream()
+                .filter(e -> e.getValue() == null).map(Map.Entry::getKey).findFirst().orElseThrow();
+        int vpBefore = p1.getVp();
+
+        engine.apply(state, new GameEngine.Submit("p1", "ACTION_PASS", null, Map.of("booster", freeBooster)));
+
+        assertEquals(vpBefore + 4, p1.getVp()); // 딥 섹터 2개 × 2vp — 건물 3개로 잘못 세면 6이 되어 틀림
     }
 }

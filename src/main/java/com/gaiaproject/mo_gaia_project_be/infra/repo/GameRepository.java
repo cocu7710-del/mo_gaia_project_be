@@ -40,4 +40,14 @@ public interface GameRepository extends JpaRepository<GameEntity, UUID> {
             order by g.createdAt desc
             """)
     List<GameEntity> findOngoingExcludingUser(@Param("userId") UUID userId);
+
+    /** 내가 참가했던 완료 게임 (로비 완료 탭 — 다시 들어가서 최종 결과 확인) */
+    @Query("""
+            select g from GameEntity g
+            where g.status = 'FINISHED'
+              and exists (select 1 from GamePlayerEntity p
+                          where p.gameId = g.id and p.userId = :userId)
+            order by g.createdAt desc
+            """)
+    List<GameEntity> findFinishedByUserId(@Param("userId") UUID userId);
 }

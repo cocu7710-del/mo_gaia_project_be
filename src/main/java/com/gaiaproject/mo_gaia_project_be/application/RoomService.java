@@ -243,6 +243,13 @@ public class RoomService {
                 .map(game -> view(game, null, null)).toList();
     }
 
+    /** 완료 탭 — 내가 참가했던 완료 게임 (나간 뒤에도 다시 들어가서 최종 결과 확인) */
+    @Transactional(readOnly = true)
+    public List<RoomView> listMyFinished(UUID userId) {
+        return games.findFinishedByUserId(userId).stream()
+                .map(game -> ongoingView(game, userId)).toList();
+    }
+
     /** 방장 전용 — 시작 전 멤버 강퇴 */
     @Transactional
     public RoomView kick(UUID roomId, UUID requesterId, UUID targetUserId) {

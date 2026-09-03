@@ -629,8 +629,8 @@ public class GameEngine {
             case "VP_4_PER_TRADING_STATION" -> gainVp(p, 4 * builtCount(state, playerId, "TRADING_STATION"), "TECH_ADV");
             case "VP_5_PER_FEDERATION_TOKEN" -> gainVp(p, 5 * p.getFederationTokens().size(), "TECH_ADV");
             case "VP_2_PER_GAIA_PLANET" -> gainVp(p, 2 * gaiaPlanetCount(state, playerId), "TECH_ADV");
-            case "VP_2_PER_BUILDING_IN_SECTORS" -> gainVp(p, 2 * buildingsInBaseSectors(state, playerId), "TECH_ADV");
-            case "ORE_1_PER_BUILDING_IN_SECTORS" -> p.setOre(p.getOre() + buildingsInBaseSectors(state, playerId));
+            case "VP_2_PER_BUILDING_IN_SECTORS" -> gainVp(p, 2 * sectorsWithBuildingBase(state, playerId), "TECH_ADV");
+            case "ORE_1_PER_BUILDING_IN_SECTORS" -> p.setOre(p.getOre() + sectorsWithBuildingBase(state, playerId));
             case "VP_6_PER_BIG_BUILDING" -> {
                 int big = builtCount(state, playerId, "PLANETARY_INSTITUTE") + builtCount(state, playerId, "ACADEMY");
                 gainVp(p, 6 * big, "TECH_ADV");
@@ -1052,7 +1052,7 @@ public class GameEngine {
             // 대기(재고) + 포밍중(맵) + 발타크 QIC 변환분(라운드 종료 시 반환되는 임시 상태) — 소행성 영구 소각만 제외
             case "GAIAFORMER" -> p.stockOf("GAIAFORMER") + builtCount(state, playerId, "GAIAFORMER")
                     + p.getBaltaksConvertedFormers();
-            case "DEEP_SECTOR_BUILDING" -> deepSectorBuildings(state, playerId);
+            case "DEEP_SECTOR_BUILDING" -> deepSectorsWithBuilding(state, playerId);
             default -> 0;
         };
     }
@@ -2284,9 +2284,10 @@ public class GameEngine {
     private void gainResources(GameState state, String playerId, JsonNode gain, String vpCategory) {
         PlayerState p = state.player(playerId);
         JsonNode faction = faction(state, playerId);
-        p.setCredits(p.getCredits() + gain.path("credits").asInt(0));
-        p.setOre(p.getOre() + gain.path("ore").asInt(0));
-        p.setKnowledge(p.getKnowledge() + gain.path("knowledge").asInt(0));
+        // 크레딧/광석/지식은 보드 트랙 상한을 넘겨 받을 수 없다 — 초과분은 소실 (공식 규칙)
+        p.setCredits(Math.min(30, p.getCredits() + gain.path("credits").asInt(0)));
+        p.setOre(Math.min(15, p.getOre() + gain.path("ore").asInt(0)));
+        p.setKnowledge(Math.min(15, p.getKnowledge() + gain.path("knowledge").asInt(0)));
         gainVp(p, gain.path("vp").asInt(0), vpCategory);
         p.setBowl1(p.getBowl1() + gain.path("powerTokens").asInt(0));
         p.setBowl3(p.getBowl3() + gain.path("powerTokensBowl3").asInt(0));
@@ -2479,10 +2480,15 @@ public class GameEngine {
                 || playerId.equals(h.getParasiteOwner());
     }
 
-    private int buildingsInBaseSectors(GameState state, String playerId) {
-        return (int) state.getHexes().values().stream()
-                .filter(h -> hasBuildingOf(h, playerId) && h.getSectorId().startsWith("SECTOR_"))
-                .count();
+    /** 기본 섹터 중 내 건물이 있는 섹터 수 — 건물 개수가 아니라 "섹터당" 판정 (공식 카드 문구 기준) */
+    private int sectorsWithBuildingBase(GameState state, String playerId) {
+        Set<String> sectors = new HashSet<>();
+        for (HexState h : state.getHexes().values()) {
+            if (hasBuildingOf(h, playerId) && h.getSectorId().startsWith("SECTOR_")) {
+                sectors.add(h.getSectorId());
+            }
+        }
+        return sectors.size();
     }
 
     private int deepSectorsWithBuilding(GameState state, String playerId) {
@@ -2493,12 +2499,6 @@ public class GameEngine {
             }
         }
         return sectors.size();
-    }
-
-    private int deepSectorBuildings(GameState state, String playerId) {
-        return (int) state.getHexes().values().stream()
-                .filter(h -> hasBuildingOf(h, playerId) && h.getSectorId().startsWith("DEEP_"))
-                .count();
     }
 
     private int asteroidBuildings(GameState state, String playerId) {
@@ -3084,15 +3084,7 @@ public class GameEngine {
                 }
                 yield max;
             }
-            case "BASE_SECTORS_WITH_BUILDING" -> {
-                Set<String> sectors = new HashSet<>();
-                for (HexState h : state.getHexes().values()) {
-                    if (hasBuildingOf(h, playerId) && h.getSectorId().startsWith("SECTOR_")) {
-                        sectors.add(h.getSectorId());
-                    }
-                }
-                yield sectors.size();
-            }
+            case "BASE_SECTORS_WITH_BUILDING" -> sectorsWithBuildingBase(state, playerId);
             default -> 0;
         };
     }

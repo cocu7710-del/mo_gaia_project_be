@@ -81,6 +81,22 @@ class GameRoundCycleTest {
     }
 
     @Test
+    void 수입으로_크레딧_광석_지식이_보드_상한을_넘지_않는다() {
+        GameState state = readyGame();
+        PlayerState p1 = state.player("p1");
+        p1.setCredits(30);
+        p1.setOre(15);
+        p1.setKnowledge(15);
+
+        passAll(state);
+        resolveIncomeDecisions(state);
+
+        assertEquals(30, p1.getCredits());
+        assertEquals(15, p1.getOre());
+        assertEquals(15, p1.getKnowledge());
+    }
+
+    @Test
     void 파워_수입_순서가_결과를_바꾸면_결정이_발생한다() {
         GameState state = readyGame();
         PlayerState p1 = state.player("p1");
