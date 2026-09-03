@@ -435,6 +435,12 @@ public class GameEngine {
         if (p.stockOf(to) < 1) {
             throw new EngineException("재고 없음: " + to);
         }
+        if ("ACADEMY".equals(to)) {
+            String academyType = (String) submit.payload().getOrDefault("academyType", "KNOWLEDGE");
+            if (hasAcademyOfType(state, submit.playerId(), academyType)) {
+                throw new EngineException("이미 같은 종류의 아카데미를 보유하고 있습니다: " + academyType);
+            }
+        }
 
         JsonNode costNode = data.constants().get("buildings").get(to).get("cost");
         if ("TRADING_STATION".equals(to) && hasOpponentBuildingNear(state, submit.playerId(), target, 2)) {
@@ -1767,6 +1773,13 @@ public class GameEngine {
                 .filter(h -> playerId.equals(h.getBuildingOwner()) && "ACADEMY".equals(h.getBuildingType())
                         && "QIC".equals(h.getAcademyType()))
                 .count();
+    }
+
+    /** 해당 종류(KNOWLEDGE/QIC)의 아카데미를 이미 보유하고 있는지 — 같은 종류 중복 건설 방지 */
+    private boolean hasAcademyOfType(GameState state, String playerId, String academyType) {
+        return state.getHexes().values().stream()
+                .anyMatch(h -> playerId.equals(h.getBuildingOwner()) && "ACADEMY".equals(h.getBuildingType())
+                        && academyType.equals(h.getAcademyType()));
     }
 
     /** 점수용 광산 수 — 인공물 ⑦⑧ 가상 광산·검은행성 광산 포함 (수입 광산 수에는 미포함 — 3번째 광산 슬롯을 밀지 않도록) */

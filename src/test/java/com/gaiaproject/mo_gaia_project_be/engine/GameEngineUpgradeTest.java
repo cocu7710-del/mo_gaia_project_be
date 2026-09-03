@@ -3,6 +3,7 @@ package com.gaiaproject.mo_gaia_project_be.engine;
 import com.gaiaproject.mo_gaia_project_be.engine.map.HexCoord;
 import com.gaiaproject.mo_gaia_project_be.engine.model.Decision;
 import com.gaiaproject.mo_gaia_project_be.engine.model.GameState;
+import com.gaiaproject.mo_gaia_project_be.engine.model.HexState;
 import com.gaiaproject.mo_gaia_project_be.engine.model.PlayerState;
 import com.gaiaproject.mo_gaia_project_be.engine.rules.GameData;
 import org.junit.jupiter.api.BeforeAll;
@@ -354,5 +355,33 @@ class GameEngineUpgradeTest {
                 Map.of("hexQ", target.q(), "hexR", target.r(), "qicForRange", qic)));
 
         assertEquals(vpBefore + 2, p1.getVp());
+    }
+
+    @Test
+    void 같은_종류의_아카데미는_두_번_지을_수_없다() {
+        GameState state = readyGame();
+
+        // 지식 아카데미를 이미 보유한 상태로 세팅 (테스트 편의상 직접 배치)
+        String existingKey = findHex(state, h -> !h.hasBuilding() && h.getShip() == null);
+        HexState academyHex = state.getHexes().get(existingKey);
+        academyHex.setBuildingOwner("p1");
+        academyHex.setBuildingType("ACADEMY");
+        academyHex.setAcademyType("KNOWLEDGE");
+
+        String labKey = findHex(state, h -> "p1".equals(h.getBuildingOwner()) && "MINE".equals(h.getBuildingType()));
+        state.getHexes().get(labKey).setBuildingType("RESEARCH_LAB");
+        HexCoord lab = HexCoord.parse(labKey);
+
+        EngineException e = assertThrows(EngineException.class, () -> engine.apply(state,
+                new GameEngine.Submit("p1", "ACTION_UPGRADE", null,
+                        Map.of("hexQ", lab.q(), "hexR", lab.r(), "to", "ACADEMY", "academyType", "KNOWLEDGE"))));
+        assertTrue(e.getMessage().contains("아카데미"));
+        assertEquals("RESEARCH_LAB", state.getHexes().get(labKey).getBuildingType()); // 거부됐으니 그대로
+
+        // 다른 종류(QIC)는 가능
+        engine.apply(state, new GameEngine.Submit("p1", "ACTION_UPGRADE", null,
+                Map.of("hexQ", lab.q(), "hexR", lab.r(), "to", "ACADEMY", "academyType", "QIC")));
+        assertEquals("ACADEMY", state.getHexes().get(labKey).getBuildingType());
+        assertEquals("QIC", state.getHexes().get(labKey).getAcademyType());
     }
 }
