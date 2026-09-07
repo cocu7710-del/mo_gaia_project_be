@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -170,5 +171,26 @@ class GameSetupTest {
         GameState a = GameSetup.create(data, 99L, seats());
         GameState b = GameSetup.create(data, 99L, seats());
         assertEquals(a, b);
+    }
+
+    @Test
+    void 같은_시드는_비딩과_1인플_모드에서_같은_맵_보드_종족후보군을_보여준다() {
+        long seed = 5906936209042761271L; // 사용자 리포트 시드 — 재현 확인용
+        List<String> playerIds = List.of("p1", "p2", "p3", "p4");
+
+        GameState bidding = GameSetup.createWithBidding(data, seed, playerIds);
+        GameState local = GameSetup.createLocalRandom(data, seed, playerIds);
+
+        // 맵·보드는 종족 배정 방식과 무관하게 항상 동일해야 한다 (rule-audit K-1)
+        assertEquals(bidding.getHexes(), local.getHexes());
+        assertEquals(bidding.getBoard().getRoundScoringTiles(), local.getBoard().getRoundScoringTiles());
+        assertEquals(bidding.getBoard().getFinalScoringTiles(), local.getBoard().getFinalScoringTiles());
+        assertEquals(bidding.getBoard().getBoosterHolders().keySet(), local.getBoard().getBoosterHolders().keySet());
+
+        // 종족 후보군(4종)도 비딩 모드와 1인플 모드가 일치해야 한다 — 배정 순서만 다를 수 있다
+        Set<String> biddingCandidates = Set.copyOf(bidding.getBoard().getFactionPool());
+        Set<String> localFactions = playerIds.stream().map(id -> local.player(id).getFaction())
+                .collect(java.util.stream.Collectors.toSet());
+        assertEquals(biddingCandidates, localFactions);
     }
 }

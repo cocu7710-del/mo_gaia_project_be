@@ -35,13 +35,7 @@ public final class GameSetup {
             throw new EngineException("4인 전용 게임입니다 (현재 " + seats.size() + "명)");
         }
         Random rng = new Random(seed);
-        GameState state = new GameState();
-        state.setRngSeed(seed);
-        state.setPhase("SETUP_MINES");
-        state.setRound(0);
-
-        generateMap(data, state, rng.nextLong());
-        drawBoard(data, state.getBoard(), rng);
+        GameState state = newStateWithMapAndBoard(data, seed, rng);
         initPlayers(data, state, seats);
         assignThreeShovelPlanets(data, state);
         buildSetupQueue(data, state, seats);
@@ -50,12 +44,25 @@ public final class GameSetup {
         return state;
     }
 
-    /** 1인 플레이 + 비딩 없음 — 4종족을 무작위로 뽑아(같은 홈행성 중복 없이) playerIds 순서대로 배정 후 바로 SETUP_MINES */
+    /** 맵 생성 + 보드 드로우 (같은 seed면 비딩·1인 플레이 등 어느 경로든 항상 동일 결과, rule-audit K-1) */
+    private static GameState newStateWithMapAndBoard(GameData data, long seed, Random rng) {
+        GameState state = new GameState();
+        state.setRngSeed(seed);
+        state.setPhase("SETUP_MINES");
+        state.setRound(0);
+        generateMap(data, state, rng.nextLong());
+        drawBoard(data, state.getBoard(), rng);
+        return state;
+    }
+
+    /** 1인 플레이 + 비딩 없음 — 4종족을 무작위로 뽑아(같은 홈행성 중복 없이) playerIds 순서대로 배정 후 바로 SETUP_MINES.
+     * 맵·보드 생성 뒤 "같은 rng 이어서" 종족을 뽑아야 같은 seed일 때 비딩 모드의 종족 후보군과 일치한다 (K-1). */
     public static GameState createLocalRandom(GameData data, long seed, List<String> playerIds) {
         if (playerIds.size() != 4) {
             throw new EngineException("4인 전용 게임입니다 (현재 " + playerIds.size() + "명)");
         }
         Random rng = new Random(seed);
+        GameState state = newStateWithMapAndBoard(data, seed, rng);
         List<JsonNode> shuffled = new ArrayList<>();
         for (JsonNode faction : data.factions()) {
             shuffled.add(faction);
@@ -75,7 +82,12 @@ public final class GameSetup {
         for (int i = 0; i < playerIds.size(); i++) {
             seats.add(new PlayerSeat(playerIds.get(i), pickedFactions.get(i)));
         }
-        return create(data, seed, seats);
+        initPlayers(data, state, seats);
+        assignThreeShovelPlanets(data, state);
+        buildSetupQueue(data, state, seats);
+        pushNextSetupDecision(state);
+
+        return state;
     }
 
     /** 비딩 모드 — 종족·턴 순서는 경매로 확정. playerIds = 입장 순서 (1번부터 발언). */
