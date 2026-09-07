@@ -459,7 +459,9 @@ public class GameService {
         players.findById(new GamePlayerEntity.Key(gameId, actorId))
                 .ifPresent(row -> {
                     row.setFaction((String) effects.get("faction"));
-                    row.setSeatNo(((Number) effects.get("seatNo")).shortValue());
+                    // seat_no는 대기방 입장 순서 전용 — 게임 턴 순번(effects.seatNo)은 종족 선택에 따라
+                    // 플레이어마다 다르게 겹칠 수 있어 여기 덮어쓰면 (game_id, seat_no) 유니크 제약 위반이 난다.
+                    // 실제 턴 순서는 GameState.turnOrder가 진실이므로 이 컬럼은 그대로 둔다.
                     row.setBidVp(((Number) effects.get("bidVp")).shortValue());
                     players.save(row);
                 });
