@@ -1579,7 +1579,9 @@ public class GameEngine {
 
         List<Map<String, Object>> pushed = new ArrayList<>();
         switch (action.path("special").asText("")) {
-            case "VP_2_PLUS_1_PER_TECH_TILE" -> gainVp(p, 2 + p.getTechTiles().size(), "FLEET");
+            // 고급 타일이 덮은 기본 타일은 별개 타일로 세지 않는다 (덮인 타일 수만큼 차감)
+            case "VP_2_PLUS_1_PER_TECH_TILE" ->
+                    gainVp(p, 2 + p.getTechTiles().size() - p.getCoveredTechTiles().size(), "FLEET");
             case "VP_2_PLUS_1_PER_PLANET_TYPE" -> gainVp(p, 2 + planetTypesWithArtifacts(state, submit.playerId()), "FLEET");
             case "INSTANT_GAIAFORM" -> instantGaiaform(state, submit);
             case "BUILD_MINE_TERRAFORM_1_FREE" -> pushed.add(pushFreeMine(state, submit.playerId(), 1, false, 0, null));

@@ -293,6 +293,28 @@ class GameFleetTest {
     }
 
     @Test
+    void TF_마스_VP_액션은_고급_타일이_덮은_기본_타일을_중복으로_세지_않는다() {
+        GameState state = readyGame();
+        PlayerState p1 = state.player("p1");
+        p1.setQic(10);
+        // 기본 타일 2개(그중 1개는 고급 타일에 덮임) + 고급 타일 1개 = 실제 타일 슬롯은 2개
+        p1.getTechTiles().add("BASIC_TILE_1");
+        p1.getTechTiles().add("BASIC_TILE_2");
+        p1.getTechTiles().add("ADV_TILE_1");
+        p1.getCoveredTechTiles().add("BASIC_TILE_1");
+
+        EngineTestSupport.enterFleet(engine, state, "p1", "TF_MARS");
+        state.setTurnEndPending(false); // 자유 행동 구간 종료 처리 (테스트 편의)
+        state.setActivePlayer("p1");
+        p1.setQic(10); // 입장 거리 QIC 소모분 재충전 (테스트 편의)
+
+        int vpBefore = p1.getVp();
+        engine.apply(state, new GameEngine.Submit("p1", "ACTION_FLEET", null, Map.of("actionId", "TF_MARS_VP")));
+
+        assertEquals(vpBefore + 4, p1.getVp()); // 2 + 타일 슬롯 2개 — 덮인 타일까지 세면 5가 되어 틀림
+    }
+
+    @Test
     void 이클립스_기술_액션은_파워3_지식2로_트랙을_전진시킨다() {
         GameState state = readyGame();
         PlayerState p1 = state.player("p1");

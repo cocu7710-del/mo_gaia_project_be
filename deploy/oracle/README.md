@@ -68,6 +68,39 @@ sudo docker compose down        # 전체 중지 (DB 데이터는 볼륨에 유�
 - DB 데이터는 `gaia-pgdata` 도커 볼륨에 저장 — 컨테이너 재빌드해도 유지
 - DB 비밀번호를 바꾸려면 `deploy/oracle/.env`에 `DB_PASSWORD=...` 작성 후 `docker compose up -d` (최초 기동 전에 정하는 것을 권장)
 
+## DB 데이터 조회 (VM에서)
+
+```bash
+sudo docker ps                              # db 컨테이너 이름/ID 확인 (예: oracle-db-1)
+sudo docker exec -it <컨테이너 이름 또는 ID> psql -U gaia -d gaia
+```
+
+psql 접속 후:
+
+```sql
+\dt                     -- 전체 테이블 목록
+\d game                 -- 테이블 구조 보기 (예: game)
+
+SELECT id, name, status, created_at FROM game ORDER BY created_at DESC LIMIT 10;
+SELECT * FROM users;
+SELECT count(*) FROM game_snapshot;
+
+\q                      -- 나가기
+```
+
+주요 테이블:
+
+| 테이블 | 내용 |
+|---|---|
+| `game` | 방/게임 목록 (상태, 옵션 등) |
+| `game_player` | 게임별 참가자 |
+| `game_snapshot` | 게임 상태 스냅샷 (실제 진행 데이터, 용량 큼 — `SELECT *`는 지양) |
+| `game_event` | 액션 로그 |
+| `game_pending_decision` | 대기 중인 결정 |
+| `game_chat` | 채팅 |
+| `users` | 계정 |
+| `user_settings` | 유저 설정 |
+
 ## 사용량 확인 (Always Free 한도 초과 여부)
 
 Always Free 한도를 넘어도 자동 청구되지 않고 그 작업만 거부된다 — 그래도 여유를 보고 싶으면:
