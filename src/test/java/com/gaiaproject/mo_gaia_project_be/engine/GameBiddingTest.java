@@ -15,6 +15,8 @@ import static com.gaiaproject.mo_gaia_project_be.engine.EngineTestSupport.comple
 import static com.gaiaproject.mo_gaia_project_be.engine.EngineTestSupport.newGame;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,6 +45,35 @@ class GameBiddingTest {
     private void choose(GameState state, String player, String faction) {
         Decision top = state.topDecision();
         engine.apply(state, new GameEngine.Submit(player, "CHOOSE_FACTION", top.getId(), Map.of("faction", faction)));
+    }
+
+    /** 경매를 끝까지 진행 — 전원 패스로 잔류자가 낙찰받고, 남은 후보 중 첫 종족을 고른다 (모드 a) */
+    private void runAuctionToEnd(GameState state) {
+        while ("SETUP_BID".equals(state.getPhase())) {
+            Decision top = state.topDecision();
+            if ("BID_FACTION".equals(top.getType())) {
+                pass(state, top.getTarget());
+            } else {
+                choose(state, top.getTarget(), state.getBoard().getFactionPool().get(0));
+            }
+        }
+    }
+
+    /** 3삽 종족(모웨이드·팅커로이드)이 후보에 든 첫 시드로 게임을 만든다 */
+    private GameState gameWithThreeShovelCandidate() {
+        for (long seed = 0; seed < 200; seed++) {
+            GameState state = GameSetup.createWithBidding(data, seed, List.of("p1", "p2", "p3", "p4"));
+            if (!state.getBoard().getThreeShovelByFaction().isEmpty()) {
+                return state;
+            }
+        }
+        throw new AssertionError("3삽 종족이 후보에 든 시드를 찾지 못했다");
+    }
+
+    private Set<String> ring() {
+        Set<String> ring = new HashSet<>();
+        data.constants().get("terraformRing").forEach(p -> ring.add(p.asText()));
+        return ring;
     }
 
     @Test
@@ -201,5 +232,86 @@ class GameBiddingTest {
 
         assertEquals("FINISHED", bidded.getPhase());
         assertEquals(base.player("p1").getVp() - 3, bidded.player("p1").getVp());
+    }
+
+    // ═══ 3삽 행성 — 경매 시작 시 종족 단위 확정·공개 (docs/data/factions.md "3삽 행성 배정 규칙") ═══
+
+    @Test
+    void 비딩_시작_시점에_3삽_행성이_후보_풀_기준으로_확정되어_공개된다() {
+        Set<String> ring = ring();
+        boolean sawThreeShovel = false;
+
+        for (long seed = 0; seed < 60; seed++) {
+            GameState state = GameSetup.createWithBidding(data, seed, List.of("p1", "p2", "p3", "p4"));
+            List<String> pool = state.getBoard().getFactionPool();
+            Map<String, List<String>> byFaction = state.getBoard().getThreeShovelByFaction();
+
+            // 3삽 종족만, 후보에 든 것만 담긴다
+            assertTrue(pool.containsAll(byFaction.keySet()), "시드 " + seed + ": 후보 밖 종족이 담겼다 — " + byFaction);
+            for (String id : byFaction.keySet()) {
+                assertTrue(List.of("MOWEIDS", "TINKEROIDS").contains(id), "시드 " + seed + ": 3삽 종족이 아니다 — " + id);
+            }
+            for (String id : pool) {
+                if (List.of("MOWEIDS", "TINKEROIDS").contains(id)) {
+                    assertTrue(byFaction.containsKey(id), "시드 " + seed + ": 3삽 종족인데 미배정 — " + id);
+                }
+            }
+
+            for (Map.Entry<String, List<String>> e : byFaction.entrySet()) {
+                sawThreeShovel = true;
+                List<String> planets = e.getValue();
+                assertEquals(3, planets.size(), "시드 " + seed + ": " + e.getKey());
+                assertEquals(3, Set.copyOf(planets).size(), "시드 " + seed + ": 같은 행성 중복 — " + planets);
+                assertTrue(ring.containsAll(planets), "시드 " + seed + ": 링 밖 행성 — " + planets);
+
+                // 확정분 — 후보에 있는 다른 종족의 모행성 중 링에 속한 것은 전부 포함된다
+                for (String other : pool) {
+                    if (other.equals(e.getKey())) {
+                        continue;
+                    }
+                    String home = data.faction(other).get("homePlanet").asText();
+                    if (ring.contains(home)) {
+                        assertTrue(planets.contains(home),
+                                "시드 " + seed + ": 상대 모행성 누락 — " + home + " ∉ " + planets);
+                    }
+                }
+            }
+
+            // 두 종족이 함께 있으면 랜덤 보충분은 서로 겹치지 않는다
+            if (byFaction.size() == 2) {
+                List<String> mo = byFaction.get("MOWEIDS");
+                List<String> tink = byFaction.get("TINKEROIDS");
+                String moRandom = mo.stream().filter(x -> !tink.contains(x)).findFirst().orElse(null);
+                String tinkRandom = tink.stream().filter(x -> !mo.contains(x)).findFirst().orElse(null);
+                assertNotNull(moRandom, "시드 " + seed + ": 랜덤 보충분이 겹쳤다 — " + mo + " / " + tink);
+                assertNotEquals(moRandom, tinkRandom);
+            }
+        }
+
+        assertTrue(sawThreeShovel, "60개 시드 안에 3삽 종족 후보가 하나도 없었다 — 검증이 공회전했다");
+    }
+
+    @Test
+    void 경매가_끝나면_플레이어_3삽_행성이_공개값과_정확히_일치한다() {
+        GameState state = gameWithThreeShovelCandidate();
+        // 경매 중 공개된 값을 그대로 붙잡아 둔다 (factionPool은 낙찰마다 줄어들지만 이 맵은 불변이어야 한다)
+        Map<String, List<String>> published = Map.copyOf(state.getBoard().getThreeShovelByFaction());
+
+        runAuctionToEnd(state);
+        assertEquals("SETUP_MINES", state.getPhase());
+        assertEquals(published, state.getBoard().getThreeShovelByFaction(), "경매 중 공개값이 바뀌었다");
+
+        int checked = 0;
+        for (String pid : state.getTurnOrder()) {
+            String faction = state.player(pid).getFaction();
+            List<String> mine = state.player(pid).getThreeShovelPlanets();
+            if (published.containsKey(faction)) {
+                assertEquals(published.get(faction), mine, faction + "(" + pid + ") 배정이 공개값과 다르다");
+                checked++;
+            } else {
+                assertTrue(mine.isEmpty(), faction + "(" + pid + ")은 3삽 종족이 아닌데 배정됐다");
+            }
+        }
+        assertTrue(checked > 0, "3삽 종족이 낙찰되지 않아 검증이 공회전했다");
     }
 }
