@@ -37,7 +37,9 @@ public final class GameSetup {
         Random rng = new Random(seed);
         GameState state = newStateWithMapAndBoard(data, seed, rng);
         initPlayers(data, state, seats);
-        assignThreeShovelPlanets(data, state);
+        // 비딩 없는 게임 — 좌석 종족이 곧 참가 종족 집합이라 셋업에서 바로 확정
+        computeThreeShovelPlanets(data, state, seats.stream().map(PlayerSeat::faction).toList());
+        assignThreeShovelPlanets(state);
         buildSetupQueue(data, state, seats);
         pushNextSetupDecision(state);
 
@@ -83,7 +85,9 @@ public final class GameSetup {
             seats.add(new PlayerSeat(playerIds.get(i), pickedFactions.get(i)));
         }
         initPlayers(data, state, seats);
-        assignThreeShovelPlanets(data, state);
+        // 비딩 없는 1인 플레이 — 무작위로 뽑힌 종족 4개가 곧 참가 종족 집합
+        computeThreeShovelPlanets(data, state, pickedFactions);
+        assignThreeShovelPlanets(state);
         buildSetupQueue(data, state, seats);
         pushNextSetupDecision(state);
 
@@ -132,6 +136,9 @@ public final class GameSetup {
             // 모드 a: 후보 순서 = 턴 슬롯 고정 (1번 후보 = 1턴 …). 낙찰자는 종족을 고르면 그 턴을 함께 가져간다
             board.getBidSlotFactions().addAll(board.getFactionPool());
         }
+        // 3삽 행성은 경매 판단 재료라 시작 시점에 확정해 공개한다 (factions.md "3삽 행성 배정 규칙").
+        // factionPool은 낙찰될 때마다 줄어드므로 반드시 지금(4종 전부 있을 때) 계산해 둬야 한다
+        computeThreeShovelPlanets(data, state, List.copyOf(board.getFactionPool()));
         state.getDecisionStack().add(new Decision(state.newDecisionId(), "BID_FACTION",
                 playerIds.get(0), Map.of("currentBid", 0)));
         state.setActivePlayer(playerIds.get(0));
@@ -145,35 +152,42 @@ public final class GameSetup {
             seats.add(new PlayerSeat(playerId, state.player(playerId).getFaction()));
         }
         state.setPhase("SETUP_MINES");
-        assignThreeShovelPlanets(data, state);
+        assignThreeShovelPlanets(state); // 경매 시작 때 확정해 둔 값을 복사 (재계산 없음 = 공개값과 일치 보장)
         buildSetupQueue(data, state, seats);
         pushNextSetupDecision(state);
     }
 
     /**
-     * 모웨이드·팅커로이드 3삽 행성 배정 (공개 정보):
+     * 모웨이드·팅커로이드 3삽 행성 확정 (공개 정보, docs/data/factions.md "3삽 행성 배정 규칙"):
      * 상대 기본 종족의 모행성 전부 + 나머지 링 행성 랜덤으로 총 3개.
      * 두 종족이 함께 있으면 상대 모행성은 공유되지만 랜덤 배정분은 서로 중복되지 않는다.
+     *
+     * 배정 단위가 플레이어가 아니라 <b>종족</b>이라, 이 게임에 들어오는 종족 집합만 알면 결과가 정해진다.
+     * 덕분에 비딩 게임에서도 경매 시작 시점(후보 풀 확정 직후)에 미리 확정해 공개할 수 있고,
+     * 낙찰·좌석 순서가 결과를 바꾸지 못한다. 계산은 이 함수 한 곳뿐이며 board에 담아 두고,
+     * 실제 플레이어 배정({@link #assignThreeShovelPlanets})은 그 값을 복사하기만 한다.
+     *
+     * @param factionIds 이 게임에 들어오는 종족 전부 (비딩: 후보 풀 4종 / 비딩 없음: 좌석 종족 4종)
      */
-    static void assignThreeShovelPlanets(GameData data, GameState state) {
+    static void computeThreeShovelPlanets(GameData data, GameState state, List<String> factionIds) {
         List<String> ring = new ArrayList<>();
         for (JsonNode planet : data.constants().get("terraformRing")) {
             ring.add(planet.asText());
         }
         Random rng = new Random(state.getRngSeed() ^ 0x35A11L); // 셋업 시드 파생 — 재생 결정성
         Set<String> randomUsed = new HashSet<>();
-        for (String playerId : state.getTurnOrder()) {
-            PlayerState p = state.player(playerId);
-            JsonNode faction = data.faction(p.getFaction());
-            if (!hasAbility(faction, "TERRAFORM_HOME_3_OTHERS_1") || !p.getThreeShovelPlanets().isEmpty()) {
+        Map<String, List<String>> byFaction = state.getBoard().getThreeShovelByFaction();
+        for (String factionId : factionIds) {
+            if (!hasAbility(data.faction(factionId), "TERRAFORM_HOME_3_OTHERS_1")
+                    || byFaction.containsKey(factionId)) {
                 continue;
             }
             List<String> assigned = new ArrayList<>();
-            for (String otherId : state.getTurnOrder()) {
-                if (otherId.equals(playerId)) {
+            for (String otherId : factionIds) {
+                if (otherId.equals(factionId)) {
                     continue;
                 }
-                String home = data.faction(state.player(otherId).getFaction()).get("homePlanet").asText();
+                String home = data.faction(otherId).get("homePlanet").asText();
                 if (ring.contains(home) && !assigned.contains(home)) {
                     assigned.add(home);
                 }
@@ -190,7 +204,18 @@ public final class GameSetup {
                 assigned.add(pick);
                 randomUsed.add(pick);
             }
-            p.getThreeShovelPlanets().addAll(assigned);
+            byFaction.put(factionId, assigned);
+        }
+    }
+
+    /** 확정된 종족별 3삽 행성을 플레이어에게 복사 — 재계산하지 않으므로 공개값과 반드시 일치한다 */
+    static void assignThreeShovelPlanets(GameState state) {
+        for (String playerId : state.getTurnOrder()) {
+            PlayerState p = state.player(playerId);
+            List<String> planets = state.getBoard().getThreeShovelByFaction().get(p.getFaction());
+            if (planets != null && p.getThreeShovelPlanets().isEmpty()) {
+                p.getThreeShovelPlanets().addAll(planets);
+            }
         }
     }
 

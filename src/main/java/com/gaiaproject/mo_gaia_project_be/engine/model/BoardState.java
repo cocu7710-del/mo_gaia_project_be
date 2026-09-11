@@ -57,4 +57,7 @@ public class BoardState {
     private List<String> bidSlotFactions = new ArrayList<>();
     /** 턴 슬롯("1"~"4") → 배정된 플레이어 (모드 a: 종족 고정 슬롯, 모드 b: 낙찰자 선택) */
     private Map<String, String> bidTurnSlots = new LinkedHashMap<>();
+    /** 3삽 종족(모웨이드·팅커로이드) → 배정된 3삽 행성 3개 — 셋업/비딩 시작 시 종족 단위로 확정하는
+     * 공개 정보 (docs/data/factions.md "3삽 행성 배정 규칙"). 플레이어 배정은 이 맵을 복사할 뿐 재계산하지 않는다 */
+    private Map<String, List<String>> threeShovelByFaction = new LinkedHashMap<>();
 }
