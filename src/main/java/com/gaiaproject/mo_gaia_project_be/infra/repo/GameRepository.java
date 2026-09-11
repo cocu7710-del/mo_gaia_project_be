@@ -31,10 +31,10 @@ public interface GameRepository extends JpaRepository<GameEntity, UUID> {
             """)
     List<GameEntity> findOngoingByUserId(@Param("userId") UUID userId);
 
-    /** 내가 참가하지 않은 진행 게임 (관전 탭) */
+    /** 내가 참가하지 않은 진행 중(플레이 중) 게임 (관전 탭 — 셋업 단계는 볼 게 없어 제외, 최근 생성순) */
     @Query("""
             select g from GameEntity g
-            where g.status in ('SETUP', 'PLAYING')
+            where g.status = 'PLAYING'
               and not exists (select 1 from GamePlayerEntity p
                               where p.gameId = g.id and p.userId = :userId)
             order by g.createdAt desc

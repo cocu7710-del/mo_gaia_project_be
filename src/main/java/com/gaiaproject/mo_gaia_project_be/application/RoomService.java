@@ -236,10 +236,11 @@ public class RoomService {
                 .map(game -> ongoingView(game, userId)).toList();
     }
 
-    /** 관전 탭 — 내가 참가하지 않은 진행 게임 */
+    /** 관전 탭 — 내가 참가하지 않은 진행(플레이 중) 멀티플레이 게임 (1인 플레이는 관전 대상 아님) */
     @Transactional(readOnly = true)
     public List<RoomView> listSpectatable(UUID userId) {
         return games.findOngoingExcludingUser(userId).stream()
+                .filter(game -> !isLocalMode(game))
                 .map(game -> view(game, null, null)).toList();
     }
 
