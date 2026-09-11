@@ -294,6 +294,10 @@ public class GameService {
         if ("FINISHED".equals(game.getStatus())) {
             persistFinalResults(gameId, state);
         }
+        // 새 행동이 들어오면 대기 중인 언두 요청은 무효 (되돌림 대상이 바뀜)
+        if (game.getUndoRequest() != null) {
+            game.setUndoRequest(null);
+        }
 
         broadcastAfterCommit(gameId, seq, engineEvents);
         return new SubmitResult(seq, engineEvents);
@@ -322,8 +326,7 @@ public class GameService {
     /**
      * 요청자의 마지막 되돌림 단위(메인 액션 ACTION_* 또는 자유 변환 FREE_ACTION_CONVERTED) 직전 상태로 복원.
      * 자유 변환은 자기 턴·결정 스택 빈 상태에서만 가능하므로 직전 seq 스냅샷이 항상 CHECKPOINT로 남아 있다.
-     * 언두 정책(방 옵션): FREE 자유 / NONE 금지 / CONSENT — 상대의 수동 응답이 있으면 거부
-     * (동의 요청·승인 플로우는 로비 단계에서 추가. 자동 리치 수락은 별도 이벤트가 아니라 현재 미탐지).
+     * 언두 정책(방 옵션): FREE 자유 / NONE 금지 / CONSENT — 상대가 그 뒤로 행동했으면 영향받은 전원 동의 필요.
      */
     @Transactional
     public SubmitResult undoLastAction(UUID gameId, String playerId) {
@@ -333,6 +336,9 @@ public class GameService {
         if ("NONE".equals(policy)) {
             throw new EngineException("경쟁 모드에서는 언두할 수 없습니다");
         }
+        if (game.getUndoRequest() != null) {
+            throw new IllegalStateException("이미 진행 중인 언두 요청이 있습니다");
+        }
 
         List<GameEventEntity> live = events.findByGameIdAndUndoneByIsNullOrderBySeqDesc(gameId);
         GameEventEntity target = live.stream()
@@ -340,14 +346,81 @@ public class GameService {
                         && (e.getEventType().startsWith("ACTION_") || e.getEventType().equals("FREE_ACTION_CONVERTED")))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("되돌릴 액션이 없습니다"));
+
         if ("CONSENT".equals(policy)) {
-            boolean opponentResponded = live.stream().anyMatch(e ->
-                    e.getSeq() > target.getSeq() && e.getActor() != null && !isSeatOf(e.getActor(), playerId));
-            if (opponentResponded) {
-                throw new EngineException("상대 응답 이후의 언두는 동의가 필요합니다");
+            List<String> opponents = live.stream()
+                    .filter(e -> e.getSeq() > target.getSeq() && e.getActor() != null && !isSeatOf(e.getActor(), playerId))
+                    .map(GameEventEntity::getActor)
+                    .distinct()
+                    .toList();
+            if (!opponents.isEmpty()) {
+                Map<String, Object> req = new LinkedHashMap<>();
+                req.put("requestedBy", playerId);
+                req.put("targetSeq", target.getSeq());
+                req.put("needConsent", opponents);
+                req.put("approved", new ArrayList<String>());
+                game.setUndoRequest(codec.writeMap(req));
+                EngineEvent ev = new EngineEvent("UNDO_REQUESTED", playerId, req);
+                broadcastAfterCommit(gameId, game.getLastSeq(), List.of(ev));
+                return new SubmitResult(game.getLastSeq(), List.of(ev));
             }
         }
+        return applyUndo(game, live, target, playerId);
+    }
 
+    /** 언두 동의 응답 — approve=false면 취소, 전원 approve면 실제 롤백 실행 */
+    @Transactional
+    public SubmitResult respondUndo(UUID gameId, String playerId, boolean approve) {
+        GameEntity game = games.findByIdForUpdate(gameId)
+                .orElseThrow(() -> new IllegalArgumentException("게임 없음: " + gameId));
+        if (game.getUndoRequest() == null) {
+            throw new IllegalStateException("진행 중인 언두 요청이 없습니다");
+        }
+        Map<String, Object> req = codec.readMap(game.getUndoRequest());
+        @SuppressWarnings("unchecked") List<String> need = (List<String>) req.get("needConsent");
+        @SuppressWarnings("unchecked") List<String> approved = new ArrayList<>((List<String>) req.get("approved"));
+        String requester = (String) req.get("requestedBy");
+        boolean isRequester = isSeatOf(requester, playerId);
+        if (!isRequester && need.stream().noneMatch(id -> isSeatOf(id, playerId))) {
+            throw new IllegalStateException("이 언두 요청의 승인 대상이 아닙니다");
+        }
+
+        // 거부: 승인 대상 누구든 거부하면, 요청자가 취소하면 → 요청 폐기
+        if (!approve) {
+            game.setUndoRequest(null);
+            EngineEvent ev = new EngineEvent(isRequester ? "UNDO_CANCELLED" : "UNDO_REJECTED", playerId,
+                    Map.of("requestedBy", requester));
+            broadcastAfterCommit(gameId, game.getLastSeq(), List.of(ev));
+            return new SubmitResult(game.getLastSeq(), List.of(ev));
+        }
+        if (isRequester) {
+            throw new IllegalStateException("요청자는 승인할 수 없습니다 (취소만 가능)");
+        }
+
+        for (String id : need) {
+            if (isSeatOf(id, playerId) && !approved.contains(id)) {
+                approved.add(id);
+            }
+        }
+        if (!approved.containsAll(need)) {
+            req.put("approved", approved);
+            game.setUndoRequest(codec.writeMap(req));
+            EngineEvent ev = new EngineEvent("UNDO_APPROVED", playerId, req);
+            broadcastAfterCommit(gameId, game.getLastSeq(), List.of(ev));
+            return new SubmitResult(game.getLastSeq(), List.of(ev));
+        }
+
+        long targetSeq = ((Number) req.get("targetSeq")).longValue();
+        List<GameEventEntity> live = events.findByGameIdAndUndoneByIsNullOrderBySeqDesc(gameId);
+        GameEventEntity target = live.stream().filter(e -> e.getSeq() == targetSeq).findFirst()
+                .orElseThrow(() -> new IllegalStateException("언두 대상 이벤트가 사라졌습니다"));
+        game.setUndoRequest(null);
+        return applyUndo(game, live, target, requester);
+    }
+
+    /** 실제 롤백 — 대상 이후 이벤트 무효화 + TURN_UNDONE 추가 + 스냅샷 복원 */
+    private SubmitResult applyUndo(GameEntity game, List<GameEventEntity> live, GameEventEntity target, String actorId) {
+        UUID gameId = game.getId();
         long restoreSeq = target.getSeq() - 1;
         GameSnapshotEntity restore = snapshots.findByGameIdAndSeq(gameId, restoreSeq)
                 .orElseThrow(() -> new IllegalStateException("복원 스냅샷 없음: " + restoreSeq));
@@ -361,10 +434,10 @@ public class GameService {
                 events.save(e);
             }
         }
-        EngineEvent undoEvent = new EngineEvent("TURN_UNDONE", playerId,
+        EngineEvent undoEvent = new EngineEvent("TURN_UNDONE", actorId,
                 Map.of("undoneFromSeq", target.getSeq(), "undoneToSeq", game.getLastSeq(), "restoredSeq", restoreSeq));
         events.save(GameEventEntity.builder()
-                .gameId(gameId).seq(undoSeq).eventType("TURN_UNDONE").actor(playerId)
+                .gameId(gameId).seq(undoSeq).eventType("TURN_UNDONE").actor(actorId)
                 .payload(codec.writeMap(new LinkedHashMap<>(undoEvent.payload())))
                 .build());
 
@@ -395,6 +468,10 @@ public class GameService {
                 (tools.jackson.databind.node.ObjectNode) codec.toTree(state);
         node.set("incomePreview", codec.toTree(engine.incomePreview(state)));
         node.set("finalScorePreview", codec.toTree(engine.finalScorePreview(state)));
+        String undoReq = games.findById(gameId).map(GameEntity::getUndoRequest).orElse(null);
+        if (undoReq != null) {
+            node.set("undoRequest", codec.toTree(codec.readMap(undoReq)));
+        }
         return node.toString();
     }
 

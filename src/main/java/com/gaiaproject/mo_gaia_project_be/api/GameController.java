@@ -39,6 +39,8 @@ public class GameController {
 
     public record ChatRequest(@NotBlank @Size(max = 500) String message) {}
 
+    public record UndoRespondRequest(boolean approve) {}
+
     private final GameService service;
     private final ChatService chat;
     private final UserRepository users;
@@ -76,6 +78,13 @@ public class GameController {
     @PostMapping("/{gameId}/undo")
     public GameService.SubmitResult undo(@PathVariable UUID gameId, Authentication auth) {
         return service.undoLastAction(gameId, enginePlayerId(auth));
+    }
+
+    /** 언두 동의 응답 (CONSENT 정책 — 상대가 행동한 뒤의 언두 요청에 대해) */
+    @PostMapping("/{gameId}/undo/respond")
+    public GameService.SubmitResult undoRespond(@PathVariable UUID gameId,
+                                                @RequestBody UndoRespondRequest request, Authentication auth) {
+        return service.respondUndo(gameId, enginePlayerId(auth), request.approve());
     }
 
     /** 리플레이·관전용 이벤트 로그 */

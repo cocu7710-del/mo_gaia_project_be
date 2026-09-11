@@ -124,6 +124,99 @@ class GameFlowIntegrationTest {
     }
 
     @Test
+    void CONSENT_모드_상대가_행동한_뒤_언두는_동의_후_적용된다() {
+        GameService.CreatedGame created = service.createGame("동의언두", 3L, List.of(
+                new GameService.SeatRequest("cu1", "GEODENS"),
+                new GameService.SeatRequest("cu2", "GLEENS"),
+                new GameService.SeatRequest("cu3", "TERRANS"),
+                new GameService.SeatRequest("cu4", "NEVLAS")),
+                new GameService.GameOptions(false, "CONSENT"));
+        UUID gameId = created.gameId();
+        String p1 = created.playersByNickname().get("cu1").toString();
+        String p2 = created.playersByNickname().get("cu2").toString();
+
+        driveToPlaying(gameId);
+        GameState state = service.loadLatestState(gameId);
+        assertEquals("PLAYING", state.getPhase());
+
+        // p1 패스 → p2 패스 (상대가 p1 액션 뒤에 행동)
+        String b1 = freeBooster(state);
+        service.submit(gameId, new GameEngine.Submit(p1, "ACTION_PASS", null, Map.of("booster", b1)), null);
+        state = service.loadLatestState(gameId);
+        service.submit(gameId, new GameEngine.Submit(p2, "ACTION_PASS", null, Map.of("booster", freeBooster(state))), null);
+
+        // p1 언두 요청 — 즉시 롤백되지 않고 동의 대기 상태가 된다
+        GameService.SubmitResult req = service.undoLastAction(gameId, p1);
+        assertEquals("UNDO_REQUESTED", req.events().get(0).type());
+        assertTrue(service.loadLatestStateJson(gameId).contains("undoRequest"));
+        assertTrue(service.loadLatestState(gameId).player(p1).isPassed()); // 아직 롤백 안 됨
+
+        // 승인 대상이 아닌 p1이 응답 시도 → 거부
+        assertThrows(IllegalStateException.class, () -> service.respondUndo(gameId, p1, true));
+
+        // p2 승인 → 롤백 실행
+        GameService.SubmitResult done = service.respondUndo(gameId, p2, true);
+        assertEquals("TURN_UNDONE", done.events().get(0).type());
+        GameState restored = service.loadLatestState(gameId);
+        assertFalse(restored.player(p1).isPassed());
+        assertFalse(service.loadLatestStateJson(gameId).contains("undoRequest")); // 요청 정리됨
+    }
+
+    @Test
+    void CONSENT_모드_거부하면_언두_요청이_취소된다() {
+        GameService.CreatedGame created = service.createGame("거부언두", 3L, List.of(
+                new GameService.SeatRequest("rj1", "GEODENS"),
+                new GameService.SeatRequest("rj2", "GLEENS"),
+                new GameService.SeatRequest("rj3", "TERRANS"),
+                new GameService.SeatRequest("rj4", "NEVLAS")),
+                new GameService.GameOptions(false, "CONSENT"));
+        UUID gameId = created.gameId();
+        String p1 = created.playersByNickname().get("rj1").toString();
+        String p2 = created.playersByNickname().get("rj2").toString();
+
+        driveToPlaying(gameId);
+        GameState state = service.loadLatestState(gameId);
+        service.submit(gameId, new GameEngine.Submit(p1, "ACTION_PASS", null, Map.of("booster", freeBooster(state))), null);
+        state = service.loadLatestState(gameId);
+        service.submit(gameId, new GameEngine.Submit(p2, "ACTION_PASS", null, Map.of("booster", freeBooster(state))), null);
+
+        service.undoLastAction(gameId, p1);
+        GameService.SubmitResult rejected = service.respondUndo(gameId, p2, false);
+        assertEquals("UNDO_REJECTED", rejected.events().get(0).type());
+        assertTrue(service.loadLatestState(gameId).player(p1).isPassed()); // 롤백 안 됨
+        assertFalse(service.loadLatestStateJson(gameId).contains("undoRequest"));
+    }
+
+    /** SETUP_MINES + SETUP_BOOSTER를 자동으로 진행해 PLAYING까지 도달시킨다 */
+    private void driveToPlaying(UUID gameId) {
+        GameState state = service.loadLatestState(gameId);
+        while ("SETUP_MINES".equals(state.getPhase())) {
+            Decision top = state.topDecision();
+            String player = top.getTarget();
+            String home = data.faction(state.player(player).getFaction()).get("homePlanet").asText();
+            String hexKey = state.getHexes().entrySet().stream()
+                    .filter(e -> home.equals(e.getValue().getPlanet()) && !e.getValue().hasBuilding())
+                    .map(Map.Entry::getKey).findFirst().orElseThrow();
+            int comma = hexKey.indexOf(',');
+            service.submit(gameId, new GameEngine.Submit(player, "PLACE_INITIAL_MINE", top.getId(),
+                    Map.of("hexQ", Integer.parseInt(hexKey.substring(0, comma)),
+                            "hexR", Integer.parseInt(hexKey.substring(comma + 1)))), null);
+            state = service.loadLatestState(gameId);
+        }
+        while ("SETUP_BOOSTER".equals(state.getPhase())) {
+            Decision top = state.topDecision();
+            service.submit(gameId, new GameEngine.Submit(top.getTarget(), "CHOOSE_BOOSTER", top.getId(),
+                    Map.of("booster", freeBooster(state))), null);
+            state = service.loadLatestState(gameId);
+        }
+    }
+
+    private String freeBooster(GameState state) {
+        return state.getBoard().getBoosterHolders().entrySet().stream()
+                .filter(e -> e.getValue() == null).map(Map.Entry::getKey).findFirst().orElseThrow();
+    }
+
+    @Test
     void 경쟁_모드에서는_언두가_거부된다() {
         GameService.CreatedGame created = service.createGame("경쟁", 4L, List.of(
                 new GameService.SeatRequest("e1", "GEODENS"),

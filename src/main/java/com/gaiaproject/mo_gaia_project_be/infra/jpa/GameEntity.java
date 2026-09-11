@@ -48,4 +48,9 @@ public class GameEntity {
 
     @Column(name = "finished_at")
     private OffsetDateTime finishedAt;
+
+    /** 언두 동의 대기 — {requestedBy, targetSeq, needConsent:[], approved:[]} JSON. null=없음 */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "undo_request")
+    private String undoRequest;
 }
