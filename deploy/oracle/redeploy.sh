@@ -5,3 +5,4 @@ git -C "$HOME/mo_gaia_project_be" pull
 cd "$HOME/mo_gaia_project_be/deploy/oracle"
 sudo docker compose up -d --build
 sudo docker image prune -f
+sudo docker builder prune -f

@@ -158,6 +158,22 @@ class GameRoundCycleTest {
     }
 
     @Test
+    void 테란_가이아_토큰_배분은_사용분도_bowl2로_복귀한다() {
+        GameState state = readyGame();
+        PlayerState p3 = state.player("p3"); // EngineTestSupport 고정 배정: p3 = TERRANS
+        int bowl2Before = p3.getBowl2();
+        int oreBefore = p3.getOre();
+
+        state.getDecisionStack().add(new Decision(state.newDecisionId(), "TERRANS_GAIA_CONVERT", "p3", Map.of("tokens", 6)));
+        engine.apply(state, new GameEngine.Submit("p3", "TERRANS_GAIA_CONVERT", state.topDecision().getId(), Map.of("ore", 1)));
+
+        // 오르 1개(3토큰) 배분 후 잔여 3토큰뿐 아니라, 배분에 쓴 3토큰도 아이타의 영구 희생과 달리 bowl2로 복귀해야 한다
+        assertEquals(oreBefore + 1, p3.getOre());
+        assertEquals(bowl2Before + 6, p3.getBowl2());
+        assertEquals(0, p3.getGaiaPower());
+    }
+
+    @Test
     void 육라운드_종료_시_최종_점수가_계산된다() {
         GameState state = readyGame();
         state.setRound(6);

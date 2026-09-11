@@ -2606,7 +2606,8 @@ public class GameEngine {
         p.setGaiaPower(0);
     }
 
-    /** 테란 PI: 가이아 토큰 → 자원 배분 (1토큰=1c, 3토큰=1o, 4토큰=1q, 4토큰=1k), 잔여 bowl2 복귀 */
+    /** 테란 PI: 가이아 토큰 → 자원 배분 (1토큰=1c, 3토큰=1o, 4토큰=1q, 4토큰=1k) — 아이타의 영구 희생과 달리
+     * 테란의 가이아 구역 파워는 어떤 식으로 쓰이든 항상 bowl2로 복귀하므로, 배분에 쓴 토큰 포함 전량 bowl2 복귀 */
     private List<EngineEvent> applyTerransGaiaConvert(GameState state, Submit submit) {
         Decision top = requireTopDecision(state, submit, "TERRANS_GAIA_CONVERT");
         PlayerState p = state.player(submit.playerId());
@@ -2625,7 +2626,7 @@ public class GameEngine {
         p.setOre(p.getOre() + ore);
         p.setQic(p.getQic() + qic);
         p.setKnowledge(p.getKnowledge() + knowledge);
-        p.setBowl2(p.getBowl2() + (tokens - cost));
+        p.setBowl2(p.getBowl2() + tokens);
         p.setGaiaPower(0);
         state.getDecisionStack().remove(top);
 
