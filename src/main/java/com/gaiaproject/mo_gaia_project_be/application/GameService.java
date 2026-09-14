@@ -491,6 +491,40 @@ public class GameService {
         return result;
     }
 
+    /** 리플레이 — 완료된 게임의 체크포인트(턴 경계) 목록. 각 지점의 라운드·활성 플레이어·단계를 함께 반환해
+     * FE가 "다음 턴"(활성 플레이어 전환 지점)·"이 라운드로 이동" 탐색을 계산할 수 있게 한다 */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> loadReplayCheckpoints(UUID gameId) {
+        requireFinished(gameId);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (GameSnapshotEntity snap : snapshots.findByGameIdOrderBySeqAsc(gameId)) {
+            GameState state = codec.read(snap.getState());
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("seq", snap.getSeq());
+            row.put("round", state.getRound());
+            row.put("activePlayer", state.getActivePlayer());
+            row.put("phase", state.getPhase());
+            result.add(row);
+        }
+        return result;
+    }
+
+    /** 리플레이 — 완료된 게임의 특정 시점(seq) 상태를 읽기 전용으로 조회 */
+    @Transactional(readOnly = true)
+    public String loadReplayStateJson(UUID gameId, long seq) {
+        requireFinished(gameId);
+        GameSnapshotEntity snap = snapshots.findByGameIdAndSeq(gameId, seq)
+                .orElseThrow(() -> new IllegalArgumentException("스냅샷 없음: seq=" + seq));
+        return codec.toTree(codec.read(snap.getState())).toString();
+    }
+
+    private void requireFinished(UUID gameId) {
+        String status = games.findById(gameId).map(GameEntity::getStatus).orElse(null);
+        if (!"FINISHED".equals(status)) {
+            throw new IllegalStateException("완료된 게임만 리플레이할 수 있습니다");
+        }
+    }
+
     // ═══════════════ 내부 ═══════════════
 
     /** 턴 경계(스택 빈 상태)는 CHECKPOINT로 영구 보관, 결정 연쇄 중간은 최신 1개(AFTER_EVENT)만 유지 */

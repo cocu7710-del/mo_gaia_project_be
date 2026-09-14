@@ -94,6 +94,18 @@ public class GameController {
         return service.loadEvents(gameId, fromSeq);
     }
 
+    /** 리플레이 — 완료된 게임의 체크포인트(턴 경계) 목록 */
+    @GetMapping("/{gameId}/replay/checkpoints")
+    public List<Map<String, Object>> replayCheckpoints(@PathVariable UUID gameId) {
+        return service.loadReplayCheckpoints(gameId);
+    }
+
+    /** 리플레이 — 특정 시점(seq)의 상태 (읽기 전용) */
+    @GetMapping(value = "/{gameId}/replay/state/{seq}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public String replayState(@PathVariable UUID gameId, @PathVariable long seq) {
+        return service.loadReplayStateJson(gameId, seq);
+    }
+
     @PostMapping("/{gameId}/chat")
     public ChatService.ChatView sendChat(@PathVariable UUID gameId,
                                          @Valid @RequestBody ChatRequest request, Authentication auth) {

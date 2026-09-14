@@ -4,9 +4,11 @@ import com.gaiaproject.mo_gaia_project_be.engine.GameEngine;
 import com.gaiaproject.mo_gaia_project_be.engine.model.Decision;
 import com.gaiaproject.mo_gaia_project_be.engine.model.GameState;
 import com.gaiaproject.mo_gaia_project_be.engine.rules.GameData;
+import com.gaiaproject.mo_gaia_project_be.infra.jpa.GameEntity;
 import com.gaiaproject.mo_gaia_project_be.infra.jpa.GamePlayerEntity;
 import com.gaiaproject.mo_gaia_project_be.infra.jpa.UserAccountEntity;
 import com.gaiaproject.mo_gaia_project_be.infra.repo.GamePlayerRepository;
+import com.gaiaproject.mo_gaia_project_be.infra.repo.GameRepository;
 import com.gaiaproject.mo_gaia_project_be.infra.repo.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,6 +54,9 @@ class GameFlowIntegrationTest {
 
     @Autowired
     UserRepository users;
+
+    @Autowired
+    GameRepository games;
 
     @Test
     void 게임_생성부터_언두까지_영속_흐름이_동작한다() {
@@ -185,6 +190,44 @@ class GameFlowIntegrationTest {
         assertEquals("UNDO_REJECTED", rejected.events().get(0).type());
         assertTrue(service.loadLatestState(gameId).player(p1).isPassed()); // 롤백 안 됨
         assertFalse(service.loadLatestStateJson(gameId).contains("undoRequest"));
+    }
+
+    @Test
+    void 리플레이는_완료된_게임에서만_체크포인트와_시점별_상태를_제공한다() {
+        GameService.CreatedGame created = service.createGame("리플레이", 3L, List.of(
+                new GameService.SeatRequest("rp1", "GEODENS"),
+                new GameService.SeatRequest("rp2", "GLEENS"),
+                new GameService.SeatRequest("rp3", "TERRANS"),
+                new GameService.SeatRequest("rp4", "NEVLAS")));
+        UUID gameId = created.gameId();
+        String p1 = created.playersByNickname().get("rp1").toString();
+
+        // 진행 중엔 리플레이 불가
+        assertThrows(IllegalStateException.class, () -> service.loadReplayCheckpoints(gameId));
+
+        driveToPlaying(gameId); // 초기 배치+부스터 선택 — 체크포인트 여러 개 생성
+        GameState state = service.loadLatestState(gameId);
+        service.submit(gameId, new GameEngine.Submit(p1, "ACTION_PASS", null, Map.of("booster", freeBooster(state))), null);
+
+        // 완료 표시 (실제 6라운드 진행은 다른 테스트에서 이미 검증됨 — 여기선 리플레이 조회 자체만 검증)
+        GameEntity game = games.findById(gameId).orElseThrow();
+        game.setStatus("FINISHED");
+        games.save(game);
+
+        List<Map<String, Object>> checkpoints = service.loadReplayCheckpoints(gameId);
+        assertFalse(checkpoints.isEmpty());
+        // seq 오름차순 정렬
+        for (int i = 1; i < checkpoints.size(); i++) {
+            assertTrue((long) checkpoints.get(i).get("seq") > (long) checkpoints.get(i - 1).get("seq"));
+        }
+        // 첫 체크포인트 = "비딩 완료 시점"(비딩 없는 게임이라 처음부터 초기 배치 단계)
+        assertEquals("SETUP_MINES", checkpoints.get(0).get("phase"));
+
+        long lastSeq = (long) checkpoints.get(checkpoints.size() - 1).get("seq");
+        String json = service.loadReplayStateJson(gameId, lastSeq);
+        assertTrue(json.contains("\"phase\""));
+
+        assertThrows(IllegalArgumentException.class, () -> service.loadReplayStateJson(gameId, 999_999L));
     }
 
     /** SETUP_MINES + SETUP_BOOSTER를 자동으로 진행해 PLAYING까지 도달시킨다 */
