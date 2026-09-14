@@ -1,4 +1,4 @@
-# 로컬 빌드 → VM 전송 → 원격 이미지 재빌드(컴파일 없음, 몇 초)+재기동까지 한 번에.
+﻿# 로컬 빌드 → VM 전송 → 원격 이미지 재빌드(컴파일 없음, 몇 초)+재기동까지 한 번에.
 # VM에서 직접 컴파일하던 기존 redeploy.sh보다 훨씬 빠르다 (컴파일은 이 스크립트가 로컬에서 미리 끝냄).
 #
 # 사용: powershell -File deploy\oracle\local-deploy.ps1 -KeyPath C:\Users\DM\.ssh\ssh-key-2026-08-10.key
