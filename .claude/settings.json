@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew.bat *)",
+      "Bash(./gradlew *)",
+      "Bash(docker ps*)",
+      "Bash(docker inspect*)",
+      "Bash(docker start*)",
+      "Bash(docker stop*)",
+      "Bash(docker exec*)",
+      "Bash(docker compose*)",
+      "Bash(netstat*)"
+    ]
+  }
+}
