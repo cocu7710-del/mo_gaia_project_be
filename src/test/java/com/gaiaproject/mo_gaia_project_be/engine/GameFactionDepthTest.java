@@ -219,6 +219,50 @@ class GameFactionDepthTest {
         assertEquals(tokensBefore + 1, p2.getBowl1() + p2.getBowl2() + p2.getBowl3()); // +1 토큰
     }
 
+    @Test
+    void 타클론_PI_리치는_토큰_먼저면_새_토큰이_충전에_같이_밀려_올라간다() {
+        GameState state = depthGame();
+        PlayerState p2 = state.player("p2");
+        p2.setBowl1(0);
+        p2.setBrainstone("BOWL1");
+        p2.setBowl2(2);
+        p2.setBowl3(1);
+
+        Decision leech = new Decision(state.newDecisionId(), "LEECH_RESPONSE", "p2",
+                Map.of("from", "p1", "amount", 2, "vpCost", 1, "taklonsPi", true));
+        state.getDecisionStack().add(leech);
+        engine.apply(state, new GameEngine.Submit("p2", "LEECH_RESPONSE", leech.getId(),
+                Map.of("accept", true, "order", "TOKEN_FIRST")));
+
+        // 새 토큰이 Ⅰ구역에 먼저 들어간 뒤 2회 충전 — 브레인스톤이 Ⅱ구역으로, 새 토큰이 그 자리를 밀어 Ⅱ→Ⅲ 채움
+        assertEquals("BOWL2", p2.getBrainstone());
+        assertEquals(0, p2.getBowl1());
+        assertEquals(3, p2.getBowl2());
+        assertEquals(1, p2.getBowl3());
+    }
+
+    @Test
+    void 타클론_PI_리치는_충전_먼저면_새_토큰이_Ⅰ구역에_남고_브레인스톤만_더_이동한다() {
+        GameState state = depthGame();
+        PlayerState p2 = state.player("p2");
+        p2.setBowl1(0);
+        p2.setBrainstone("BOWL1");
+        p2.setBowl2(2);
+        p2.setBowl3(1);
+
+        Decision leech = new Decision(state.newDecisionId(), "LEECH_RESPONSE", "p2",
+                Map.of("from", "p1", "amount", 2, "vpCost", 1, "taklonsPi", true));
+        state.getDecisionStack().add(leech);
+        engine.apply(state, new GameEngine.Submit("p2", "LEECH_RESPONSE", leech.getId(),
+                Map.of("accept", true, "order", "CHARGE_FIRST")));
+
+        // 2회 충전이 새 토큰 없이 먼저 적용 — 브레인스톤이 Ⅰ→Ⅱ→Ⅲ까지 이동, 그 후 새 토큰이 Ⅰ구역에 남음
+        assertEquals("BOWL3", p2.getBrainstone());
+        assertEquals(1, p2.getBowl1());
+        assertEquals(2, p2.getBowl2());
+        assertEquals(1, p2.getBowl3());
+    }
+
     // ═══ 하이브 연방 ═══
 
     @Test
