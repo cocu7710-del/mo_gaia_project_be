@@ -85,7 +85,7 @@ class GameFactionDepthTest {
 
         EngineException ex = assertThrows(EngineException.class, () -> engine.apply(state,
                 new GameEngine.Submit("p2", "ACTION_FREE", null,
-                        Map.of("conversion", "PW1_CREDIT", "useBrainstone", true))));
+                        Map.of("conversions", List.of(Map.of("conversion", "PW1_CREDIT", "useBrainstone", true))))));
         assertTrue(ex.getMessage().contains("브레인스톤"));
         assertEquals("BOWL3", p2.getBrainstone()); // 거부됐으니 그대로
     }
@@ -100,7 +100,7 @@ class GameFactionDepthTest {
         int creditsBefore = p2.getCredits();
 
         engine.apply(state, new GameEngine.Submit("p2", "ACTION_FREE", null,
-                Map.of("conversion", "TAKLONS_BRAINSTONE_CREDIT3", "useBrainstone", true)));
+                Map.of("conversions", List.of(Map.of("conversion", "TAKLONS_BRAINSTONE_CREDIT3", "useBrainstone", true)))));
 
         assertEquals("BOWL1", p2.getBrainstone());
         assertEquals(creditsBefore + 3, p2.getCredits());
@@ -115,7 +115,7 @@ class GameFactionDepthTest {
 
         EngineException ex = assertThrows(EngineException.class, () -> engine.apply(state,
                 new GameEngine.Submit("p2", "ACTION_FREE", null,
-                        Map.of("conversion", "PW3_ORE", "useBrainstone", true))));
+                        Map.of("conversions", List.of(Map.of("conversion", "PW3_ORE", "useBrainstone", true))))));
         assertTrue(ex.getMessage().contains("브레인스톤"));
         assertEquals("BOWL3", p2.getBrainstone());
     }
@@ -130,7 +130,7 @@ class GameFactionDepthTest {
         int oreBefore = p2.getOre();
 
         engine.apply(state, new GameEngine.Submit("p2", "ACTION_FREE", null,
-                Map.of("conversion", "TAKLONS_BRAINSTONE_ORE1", "useBrainstone", true)));
+                Map.of("conversions", List.of(Map.of("conversion", "TAKLONS_BRAINSTONE_ORE1", "useBrainstone", true)))));
 
         assertEquals("BOWL1", p2.getBrainstone());
         assertEquals(3, p2.getBowl3()); // 낭비 없음 — 일반 토큰 소모 없음
@@ -147,11 +147,33 @@ class GameFactionDepthTest {
         int knowledgeBefore = p2.getKnowledge();
 
         engine.apply(state, new GameEngine.Submit("p2", "ACTION_FREE", null,
-                Map.of("conversion", "TAKLONS_BRAINSTONE_KNOWLEDGE1", "useBrainstone", true)));
+                Map.of("conversions", List.of(Map.of("conversion", "TAKLONS_BRAINSTONE_KNOWLEDGE1", "useBrainstone", true)))));
 
         assertEquals("BOWL1", p2.getBrainstone());
         assertEquals(0, p2.getBowl3()); // 일반 토큰 1개도 함께 소모(브레인스톤3+토큰1=4)
         assertEquals(knowledgeBefore + 1, p2.getKnowledge());
+    }
+
+    @Test
+    void 배치_내_소각은_제출_순서와_무관하게_먼저_처리돼_브레인스톤_지름길_이후_바로_사용할_수_있다() {
+        GameState state = depthGame();
+        state.setActivePlayer("p2");
+        PlayerState p2 = state.player("p2");
+        p2.setBrainstone("BOWL2");
+        p2.setBowl2(1); // 브레인스톤 지름길: 일반 토큰 1개만 소모하고 브레인스톤이 Ⅲ구역으로 이동
+        p2.setBowl3(0);
+        int oreBefore = p2.getOre();
+
+        // 제출 순서상 브레인스톤 교환이 먼저지만, 엔진은 소각을 먼저 처리해야 성공한다
+        engine.apply(state, new GameEngine.Submit("p2", "ACTION_FREE", null,
+                Map.of("conversions", List.of(
+                        Map.of("conversion", "TAKLONS_BRAINSTONE_ORE1", "useBrainstone", true),
+                        Map.of("conversion", "BURN")))));
+
+        assertEquals("BOWL1", p2.getBrainstone()); // 사용 후 Ⅰ구역 복귀
+        assertEquals(0, p2.getBowl2());
+        assertEquals(0, p2.getBowl3());
+        assertEquals(oreBefore + 1, p2.getOre());
     }
 
     @Test
@@ -270,7 +292,8 @@ class GameFactionDepthTest {
         int qicBefore = p1.getQic();
         p1.setBowl3(4);
 
-        engine.apply(state, new GameEngine.Submit("p1", "ACTION_FREE", null, Map.of("conversion", "PW4_QIC")));
+        engine.apply(state, new GameEngine.Submit("p1", "ACTION_FREE", null,
+                Map.of("conversions", List.of(Map.of("conversion", "PW4_QIC")))));
 
         assertEquals("p1", state.getActivePlayer()); // 턴 유지
         assertEquals(0, p1.getBowl3());
@@ -284,7 +307,8 @@ class GameFactionDepthTest {
         PlayerState p4 = state.player("p4"); // ITARS: 4/4/0
         state.setActivePlayer("p4");
 
-        engine.apply(state, new GameEngine.Submit("p4", "ACTION_FREE", null, Map.of("conversion", "BURN")));
+        engine.apply(state, new GameEngine.Submit("p4", "ACTION_FREE", null,
+                Map.of("conversions", List.of(Map.of("conversion", "BURN")))));
 
         assertEquals(2, p4.getBowl2()); // 4 - 2
         assertEquals(1, p4.getBowl3());

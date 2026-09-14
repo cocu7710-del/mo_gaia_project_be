@@ -100,7 +100,7 @@ class GameFlowIntegrationTest {
         // 자유 변환 → 언두: FREE_ACTION_CONVERTED가 개별 롤백 대상이어야 한다 (이전 액션으로 건너뛰면 안 됨)
         int oreBefore = state.player(p1).getOre();
         service.submit(gameId, new GameEngine.Submit(p1, "ACTION_FREE", null,
-                Map.of("conversion", "ORE_CREDIT")), null);
+                Map.of("conversions", List.of(Map.of("conversion", "ORE_CREDIT")))), null);
         assertEquals(oreBefore - 1, service.loadLatestState(gameId).player(p1).getOre());
         service.undoLastAction(gameId, p1);
         GameState afterFreeUndo = service.loadLatestState(gameId);

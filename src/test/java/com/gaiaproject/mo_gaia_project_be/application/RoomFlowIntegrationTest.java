@@ -3,6 +3,7 @@ package com.gaiaproject.mo_gaia_project_be.application;
 import com.gaiaproject.mo_gaia_project_be.engine.GameEngine;
 import com.gaiaproject.mo_gaia_project_be.engine.model.Decision;
 import com.gaiaproject.mo_gaia_project_be.engine.model.GameState;
+import com.gaiaproject.mo_gaia_project_be.engine.rules.GameData;
 import com.gaiaproject.mo_gaia_project_be.infra.jpa.UserAccountEntity;
 import com.gaiaproject.mo_gaia_project_be.infra.repo.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,9 @@ class RoomFlowIntegrationTest {
 
     @Autowired
     ChatService chatService;
+
+    @Autowired
+    GameData data;
 
     private UUID user(String nickname) {
         return users.findByNickname(nickname).orElseGet(() -> users.save(UserAccountEntity.builder()
@@ -142,6 +146,60 @@ class RoomFlowIntegrationTest {
 
         rooms.deleteRoom(room.id(), u1);
         assertThrows(IllegalArgumentException.class, () -> rooms.get(room.id()));
+    }
+
+    @Test
+    void 관전_목록에는_1라운드가_시작된_게임만_보인다() {
+        UUID u1 = user("s1");
+        UUID u2 = user("s2");
+        UUID u3 = user("s3");
+        UUID u4 = user("s4");
+        RoomService.RoomView room = rooms.createRoom(u1, "관전테스트방",
+                new GameService.GameOptions(false, "FREE"));
+        rooms.join(room.id(), u2);
+        rooms.join(room.id(), u3);
+        rooms.join(room.id(), u4);
+        rooms.chooseFaction(room.id(), u1, "GEODENS");
+        rooms.chooseFaction(room.id(), u2, "GLEENS");
+        rooms.chooseFaction(room.id(), u3, "TERRANS");
+        rooms.chooseFaction(room.id(), u4, "NEVLAS");
+        rooms.setReady(room.id(), u2, true);
+        rooms.setReady(room.id(), u3, true);
+        rooms.setReady(room.id(), u4, true);
+        rooms.start(room.id(), u1);
+
+        UUID outsider = user("s5");
+        assertTrue(rooms.listSpectatable(outsider).stream().noneMatch(r -> r.id().equals(room.id())));
+
+        // 초기 배치 + 부스터 선택을 끝까지 진행 — 1라운드(PLAYING) 진입
+        GameState state = gameService.loadLatestState(room.id());
+        while ("SETUP_MINES".equals(state.getPhase())) {
+            Decision top = state.topDecision();
+            String player = top.getTarget();
+            String home = data.faction(state.player(player).getFaction()).get("homePlanet").asText();
+            String hexKey = state.getHexes().entrySet().stream()
+                    .filter(e -> home.equals(e.getValue().getPlanet()) && !e.getValue().hasBuilding())
+                    .map(Map.Entry::getKey).findFirst().orElseThrow();
+            int comma = hexKey.indexOf(',');
+            gameService.submit(room.id(), new GameEngine.Submit(player, "PLACE_INITIAL_MINE", top.getId(),
+                    Map.of("hexQ", Integer.parseInt(hexKey.substring(0, comma)),
+                            "hexR", Integer.parseInt(hexKey.substring(comma + 1)))), null);
+            state = gameService.loadLatestState(room.id());
+        }
+        assertTrue(rooms.listSpectatable(outsider).stream().noneMatch(r -> r.id().equals(room.id()))); // 셋업 중엔 여전히 제외
+        while ("SETUP_BOOSTER".equals(state.getPhase())) {
+            Decision top = state.topDecision();
+            String freeBooster = state.getBoard().getBoosterHolders().entrySet().stream()
+                    .filter(e -> e.getValue() == null).map(Map.Entry::getKey).findFirst().orElseThrow();
+            gameService.submit(room.id(), new GameEngine.Submit(top.getTarget(), "CHOOSE_BOOSTER", top.getId(),
+                    Map.of("booster", freeBooster)), null);
+            state = gameService.loadLatestState(room.id());
+        }
+        assertEquals("PLAYING", state.getPhase());
+
+        RoomService.RoomView spectateEntry = rooms.listSpectatable(outsider).stream()
+                .filter(r -> r.id().equals(room.id())).findFirst().orElseThrow();
+        assertEquals(1, spectateEntry.round()); // FE가 round==null이면 "셋업"으로 표시 — 실제 라운드 숫자가 담겨야 함
     }
 
     @Test

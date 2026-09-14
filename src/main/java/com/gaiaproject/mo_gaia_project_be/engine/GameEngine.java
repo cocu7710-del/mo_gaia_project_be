@@ -9,6 +9,7 @@ import com.gaiaproject.mo_gaia_project_be.engine.rules.GameData;
 import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -1060,6 +1061,12 @@ public class GameEngine {
     // ═══════════════ 프리 액션 (턴 미소모) / 특수 액션 (라운드 1회) ═══════════════
 
     /** 프리 액션 — 자기 턴에 자유롭게, 턴을 소모하지 않는 자원 변환 */
+    /**
+     * 자유 교환 — 여러 종류를 한 번에 제출해 한 건의 이벤트로 남긴다 (turn 미소모, 반복 가능).
+     * payload: {"conversions": [{"conversion": "PW3_ORE", "count": 2, "useBrainstone": false}, ...]}
+     * 도중에 하나라도 실패(자원 부족 등)하면 전체가 롤백된다 (단일 트랜잭션 — 부분 적용 없음).
+     */
+    @SuppressWarnings("unchecked")
     private List<EngineEvent> applyFreeAction(GameState state, Submit submit) {
         if (!"PLAYING".equals(state.getPhase()) || !state.getDecisionStack().isEmpty()
                 || !submit.playerId().equals(state.getActivePlayer())) {
@@ -1068,9 +1075,36 @@ public class GameEngine {
         PlayerState p = state.player(submit.playerId());
         JsonNode faction = faction(state, submit.playerId());
         Map<String, Object> before = resourceSnapshot(p);
-        String conversion = (String) submit.payload().get("conversion");
-        boolean useBrainstone = Boolean.TRUE.equals(submit.payload().get("useBrainstone"));
 
+        Object rawConversions = submit.payload().get("conversions");
+        if (!(rawConversions instanceof List<?> conversions) || conversions.isEmpty()) {
+            throw new EngineException("교환 내역이 없습니다");
+        }
+        // 소각(BURN)은 제출 순서와 무관하게 항상 먼저 처리한다 — Ⅱ구역 토큰을 Ⅲ구역으로 올리거나(브레인스톤 지름길 포함)
+        // 브레인스톤을 Ⅲ구역으로 옮겨줄 수 있어, 같은 배치에 담긴 다른 파워 교환이 그 결과를 바로 이어받아 쓸 수 있게 한다
+        List<Object> ordered = new ArrayList<>(conversions);
+        ordered.sort(Comparator.comparingInt(o -> "BURN".equals(((Map<?, ?>) o).get("conversion")) ? 0 : 1));
+        for (Object rawItem : ordered) {
+            Map<String, Object> item = (Map<String, Object>) rawItem;
+            String conversion = (String) item.get("conversion");
+            boolean useBrainstone = Boolean.TRUE.equals(item.get("useBrainstone"));
+            int count = item.get("count") == null ? 1 : ((Number) item.get("count")).intValue();
+            if (count <= 0) {
+                throw new EngineException("교환 횟수는 1 이상이어야 합니다: " + conversion);
+            }
+            for (int i = 0; i < count; i++) {
+                applyOneConversion(state, submit.playerId(), faction, p, conversion, useBrainstone);
+            }
+        }
+        // 턴 미소모 — turnEndPending 설정하지 않음
+        return List.of(event("FREE_ACTION_CONVERTED", submit,
+                Map.of("conversions", conversions,
+                        "resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), List.of()));
+    }
+
+    /** 자유 교환 1건(1회분) — applyFreeAction이 count만큼 반복 호출한다 */
+    private void applyOneConversion(GameState state, String playerId, JsonNode faction, PlayerState p,
+                                     String conversion, boolean useBrainstone) {
         switch (conversion == null ? "" : conversion) {
             // 표준 변환
             case "BURN" -> burnPower(p, faction);
@@ -1080,60 +1114,60 @@ public class GameEngine {
                 if (useBrainstone) {
                     throw new EngineException("이 변환은 브레인스톤으로 사용할 수 없습니다 — 3파워→크레딧3 변환을 사용하세요");
                 }
-                spendPower(p, 1, false, nevlasPiDouble(state, submit.playerId()));
-                p.setCredits(p.getCredits() + 1);
+                spendPower(p, 1, false, nevlasPiDouble(state, playerId));
+                p.setCredits(Math.min(30, p.getCredits() + 1));
             }
             case "TAKLONS_BRAINSTONE_CREDIT3" -> {
                 requireFactionAbility(faction, "BRAINSTONE");
                 spendPower(p, 3, true, false);
-                p.setCredits(p.getCredits() + 3);
+                p.setCredits(Math.min(30, p.getCredits() + 3));
             }
             case "TAKLONS_BRAINSTONE_ORE1" -> {
                 requireFactionAbility(faction, "BRAINSTONE");
                 spendPower(p, 3, true, false); // 브레인스톤 단독(잔여 없음, PW3_ORE와 동일 비율)
-                p.setOre(p.getOre() + 1);
+                p.setOre(Math.min(15, p.getOre() + 1));
             }
             case "TAKLONS_BRAINSTONE_KNOWLEDGE1" -> {
                 requireFactionAbility(faction, "BRAINSTONE");
                 spendPower(p, 4, true, false); // 브레인스톤 + Ⅲ구역 일반 토큰 1개(PW4_KNOWLEDGE와 동일 비율)
-                p.setKnowledge(p.getKnowledge() + 1);
+                p.setKnowledge(Math.min(15, p.getKnowledge() + 1));
             }
             case "TAKLONS_BRAINSTONE_QIC1" -> {
                 requireFactionAbility(faction, "BRAINSTONE");
                 spendPower(p, 4, true, false); // 브레인스톤 + Ⅲ구역 일반 토큰 1개(PW4_QIC와 동일 비율)
-                addQic(state, submit.playerId(), 1);
+                addQic(state, playerId, 1);
             }
             // 표준 파워 교환(PW3_ORE/PW4_KNOWLEDGE/PW4_QIC)은 브레인스톤 사용 금지 — 낭비 없는 전용 변환을 위 별도 id로 제공
             case "PW3_ORE" -> {
                 if (useBrainstone) {
                     throw new EngineException("이 변환은 브레인스톤으로 사용할 수 없습니다 — 브레인스톤→광석1 변환을 사용하세요");
                 }
-                spendPower(p, 3, false, nevlasPiDouble(state, submit.playerId()));
-                p.setOre(p.getOre() + 1);
+                spendPower(p, 3, false, nevlasPiDouble(state, playerId));
+                p.setOre(Math.min(15, p.getOre() + 1));
             }
             case "PW4_KNOWLEDGE" -> {
                 if (useBrainstone) {
                     throw new EngineException("이 변환은 브레인스톤으로 사용할 수 없습니다 — 브레인스톤→지식1 변환을 사용하세요");
                 }
-                spendPower(p, 4, false, nevlasPiDouble(state, submit.playerId()));
-                p.setKnowledge(p.getKnowledge() + 1);
+                spendPower(p, 4, false, nevlasPiDouble(state, playerId));
+                p.setKnowledge(Math.min(15, p.getKnowledge() + 1));
             }
             case "PW4_QIC" -> {
                 if (useBrainstone) {
                     throw new EngineException("이 변환은 브레인스톤으로 사용할 수 없습니다 — 브레인스톤→QIC1 변환을 사용하세요");
                 }
-                spendPower(p, 4, false, nevlasPiDouble(state, submit.playerId()));
-                addQic(state, submit.playerId(), 1);
+                spendPower(p, 4, false, nevlasPiDouble(state, playerId));
+                addQic(state, playerId, 1);
             }
             case "KNOWLEDGE_CREDIT" -> {
                 requireKnowledge(p, 1);
                 p.setKnowledge(p.getKnowledge() - 1);
-                p.setCredits(p.getCredits() + 1);
+                p.setCredits(Math.min(30, p.getCredits() + 1));
             }
             case "ORE_CREDIT" -> {
                 requireResources(p, 0, 1, 0);
                 p.setOre(p.getOre() - 1);
-                p.setCredits(p.getCredits() + 1);
+                p.setCredits(Math.min(30, p.getCredits() + 1));
             }
             case "ORE_TOKEN" -> {
                 requireResources(p, 0, 1, 0);
@@ -1143,7 +1177,7 @@ public class GameEngine {
             case "QIC_ORE" -> {
                 requireResources(p, 0, 0, 1);
                 p.setQic(p.getQic() - 1);
-                p.setOre(p.getOre() + 1);
+                p.setOre(Math.min(15, p.getOre() + 1));
             }
             // 종족 프리 액션
             case "XENOS_ORE_POWER3" -> {
@@ -1165,20 +1199,16 @@ public class GameEngine {
                 }
                 p.setBowl3(p.getBowl3() - 1);
                 p.setGaiaPower(p.getGaiaPower() + 1);
-                p.setKnowledge(p.getKnowledge() + 1);
+                p.setKnowledge(Math.min(15, p.getKnowledge() + 1));
             }
-            case "HH_3C_ORE" -> hadschHallasConvert(state, submit.playerId(), 3, "ORE");
-            case "HH_4C_KNOWLEDGE" -> hadschHallasConvert(state, submit.playerId(), 4, "KNOWLEDGE");
-            case "HH_4C_QIC" -> hadschHallasConvert(state, submit.playerId(), 4, "QIC");
-            case "NEVLAS_1T_CREDIT2" -> nevlasTokenConvert(state, submit.playerId(), 1, 0, 2);
-            case "NEVLAS_2T_ORE_CREDIT" -> nevlasTokenConvert(state, submit.playerId(), 2, 1, 1);
-            case "NEVLAS_3T_ORE2" -> nevlasTokenConvert(state, submit.playerId(), 3, 2, 0);
+            case "HH_3C_ORE" -> hadschHallasConvert(state, playerId, 3, "ORE");
+            case "HH_4C_KNOWLEDGE" -> hadschHallasConvert(state, playerId, 4, "KNOWLEDGE");
+            case "HH_4C_QIC" -> hadschHallasConvert(state, playerId, 4, "QIC");
+            case "NEVLAS_1T_CREDIT2" -> nevlasTokenConvert(state, playerId, 1, 0, 2);
+            case "NEVLAS_2T_ORE_CREDIT" -> nevlasTokenConvert(state, playerId, 2, 1, 1);
+            case "NEVLAS_3T_ORE2" -> nevlasTokenConvert(state, playerId, 3, 2, 0);
             default -> throw new EngineException("알 수 없는 변환: " + conversion);
         }
-        // 턴 미소모 — turnEndPending 설정하지 않음
-        return List.of(event("FREE_ACTION_CONVERTED", submit,
-                Map.of("conversion", conversion,
-                        "resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), List.of()));
     }
 
     /** 소각: bowl2에서 2개 제거 → 1개 bowl3. 아이타는 제거분 1개가 가이아 구역으로.
@@ -1212,8 +1242,8 @@ public class GameEngine {
         }
         p.setBowl3(p.getBowl3() - tokens);
         p.setBowl1(p.getBowl1() + tokens);
-        p.setOre(p.getOre() + ore);
-        p.setCredits(p.getCredits() + credits);
+        p.setOre(Math.min(15, p.getOre() + ore));
+        p.setCredits(Math.min(30, p.getCredits() + credits));
     }
 
     private boolean nevlasPiDouble(GameState state, String playerId) {
@@ -1231,8 +1261,8 @@ public class GameEngine {
         requireResources(p, cost, 0, 0);
         p.setCredits(p.getCredits() - cost);
         switch (target) {
-            case "ORE" -> p.setOre(p.getOre() + 1);
-            case "KNOWLEDGE" -> p.setKnowledge(p.getKnowledge() + 1);
+            case "ORE" -> p.setOre(Math.min(15, p.getOre() + 1));
+            case "KNOWLEDGE" -> p.setKnowledge(Math.min(15, p.getKnowledge() + 1));
             case "QIC" -> p.setQic(p.getQic() + 1);
             default -> { }
         }

@@ -195,7 +195,8 @@ class GameFactionDepth2Test {
         state.getHexes().get(piKey).setBuildingType("PLANETARY_INSTITUTE");
         p4.setBowl3(2);
 
-        engine.apply(state, new GameEngine.Submit("p4", "ACTION_FREE", null, Map.of("conversion", "PW4_QIC")));
+        engine.apply(state, new GameEngine.Submit("p4", "ACTION_FREE", null,
+                Map.of("conversions", List.of(Map.of("conversion", "PW4_QIC")))));
 
         assertEquals(0, p4.getBowl3()); // 4파워 = 토큰 2개
         assertEquals(2, p4.getQic());   // 1 + 1
@@ -203,7 +204,8 @@ class GameFactionDepth2Test {
         // 전용 변환: 2토큰 → 광석 1 + 크레딧 1
         p4.setBowl3(2);
         int oreBefore = p4.getOre();
-        engine.apply(state, new GameEngine.Submit("p4", "ACTION_FREE", null, Map.of("conversion", "NEVLAS_2T_ORE_CREDIT")));
+        engine.apply(state, new GameEngine.Submit("p4", "ACTION_FREE", null,
+                Map.of("conversions", List.of(Map.of("conversion", "NEVLAS_2T_ORE_CREDIT")))));
         assertEquals(oreBefore + 1, p4.getOre());
         assertEquals(0, p4.getBowl3());
     }

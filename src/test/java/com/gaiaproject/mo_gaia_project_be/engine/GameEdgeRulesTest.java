@@ -385,7 +385,8 @@ class GameEdgeRulesTest {
 
         // 자유 변환은 메인 액션 후에도 허용
         int credits = p1.getCredits();
-        engine.apply(state, new GameEngine.Submit("p1", "ACTION_FREE", null, Map.of("conversion", "KNOWLEDGE_CREDIT")));
+        engine.apply(state, new GameEngine.Submit("p1", "ACTION_FREE", null,
+                Map.of("conversions", List.of(Map.of("conversion", "KNOWLEDGE_CREDIT")))));
         assertEquals(credits + 1, p1.getCredits());
         assertEquals("p1", state.getActivePlayer());
 
@@ -423,5 +424,37 @@ class GameEdgeRulesTest {
         // 6라운드 종료 → 라운드 진입(능력 페이즈) 없이 즉시 최종 점수
         assertEquals("FINISHED", state.getPhase());
         assertEquals(0, p4.getTechTiles().size());
+    }
+
+    // ═══ 자유 교환 — 여러 종류·개수를 한 번에 제출 (교환 UI 다중 선택) ═══
+
+    @Test
+    void 자유_교환은_여러_종류를_한번에_제출해도_이벤트가_한_건만_남는다() {
+        GameState state = readyGame();
+        PlayerState p1 = state.player("p1");
+        p1.setOre(5);
+        p1.setKnowledge(5);
+        p1.setCredits(0);
+
+        List<EngineEvent> events = engine.apply(state, new GameEngine.Submit("p1", "ACTION_FREE", null,
+                Map.of("conversions", List.of(
+                        Map.of("conversion", "ORE_CREDIT", "count", 2),
+                        Map.of("conversion", "KNOWLEDGE_CREDIT")))));
+
+        assertEquals(1, events.size()); // 여러 건이어도 이벤트는 한 건
+        assertEquals(3, p1.getOre()); // 5 - 2
+        assertEquals(4, p1.getKnowledge()); // 5 - 1 (count 미지정 = 1회)
+        assertEquals(3, p1.getCredits()); // 2 + 1
+    }
+
+    @Test
+    void 자유_교환_배치_중_하나라도_자원이_부족하면_전체가_실패한다() {
+        GameState state = readyGame();
+        PlayerState p1 = state.player("p1");
+        p1.setOre(1); // ORE_CREDIT 2회 중 두 번째에서 부족
+        p1.setKnowledge(5);
+
+        assertThrows(EngineException.class, () -> engine.apply(state, new GameEngine.Submit("p1", "ACTION_FREE", null,
+                Map.of("conversions", List.of(Map.of("conversion", "ORE_CREDIT", "count", 2))))));
     }
 }

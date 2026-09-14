@@ -241,7 +241,7 @@ public class RoomService {
     public List<RoomView> listSpectatable(UUID userId) {
         return games.findOngoingExcludingUser(userId).stream()
                 .filter(game -> !isLocalMode(game))
-                .map(game -> view(game, null, null)).toList();
+                .map(game -> ongoingView(game, userId)).toList();
     }
 
     /** 완료 탭 — 내가 참가했던 완료 게임 (나간 뒤에도 다시 들어가서 최종 결과 확인) */
