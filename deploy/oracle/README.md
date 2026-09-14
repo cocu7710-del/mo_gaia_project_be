@@ -45,14 +45,20 @@ Docker 설치 → 인스턴스 방화벽 개방 → 소스 클론 → DB+앱 빌
 
 ## 4. 이후 배포 흐름
 
+**컴파일은 VM이 아니라 로컬에서 한다** (1 OCPU 저사양 VM에서 컴파일하면 배포마다 8~10분씩 걸림 — 로컬 빌드면 몇 초):
+
 1. 로컬에서 평소처럼 커밋 (FE 변경은 `npm run deploy-be`로 static 동기화 포함) → `git push`
-2. VM에서: `bash ~/mo_gaia_project_be/deploy/oracle/redeploy.sh`
+2. 로컬 PowerShell에서:
+   ```powershell
+   powershell -File deploy\oracle\local-deploy.ps1 -KeyPath C:\path\to\ssh-key.key
+   ```
+   (로컬 빌드 → VM으로 jar 전송 → 원격 이미지 재빌드+재기동까지 한 번에 처리)
 
-한 줄로 하려면 로컬 PowerShell에서:
-
-```powershell
-ssh -i C:\path\to\ssh-key.key ubuntu@<Public IP> "bash ~/mo_gaia_project_be/deploy/oracle/redeploy.sh"
-```
+**주의**: `local-deploy.ps1` 없이 VM에서 `redeploy.sh`만 단독 실행하면 코드가 갱신되지 않는다 —
+`docker-compose.yml`의 `app` 서비스는 이제 컴파일을 하지 않고 VM에 이미 올라와 있는
+`deploy/oracle/app.jar`을 그대로 담기만 한다(`Dockerfile.runtime`). 코드를 바꿀 때마다
+항상 `local-deploy.ps1`을 써야 한다. (루트의 기존 `Dockerfile`은 VM 내 컴파일용으로 남겨뒀지만
+현재 오라클 배포엔 쓰이지 않는다 — 참고용/비상용)
 
 ## 운영 명령 (VM에서)
 

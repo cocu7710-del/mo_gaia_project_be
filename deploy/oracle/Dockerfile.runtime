@@ -1,0 +1,9 @@
+# 로컬 빌드 전용 — VM에서는 컴파일하지 않고 이미 빌드된 jar(app.jar, local-deploy.ps1이 올려둠)만 담는다.
+# 컴파일이 없어 이미지 빌드가 몇 초 안에 끝난다 (기존 루트 Dockerfile은 VM 내 컴파일용으로 그대로 둠).
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+COPY app.jar app.jar
+EXPOSE 8080
+# 무료 인스턴스(512MB~1GB)에서 OOM(137) 방지 — 힙·메타스페이스·스레드 스택 상한 고정(기본값).
+# 메모리 여유 있는 환경은 JAVA_OPTS 환경변수로 오버라이드 (docker-compose.yml 참조)
+ENTRYPOINT ["sh", "-c", "exec java ${JAVA_OPTS:--Xmx256m -XX:MaxMetaspaceSize=160m -Xss512k} -jar app.jar"]

@@ -1,5 +1,6 @@
 # 오라클 클라우드 Always Free VM 운영용 — DB + 앱(FE 포함) + Caddy(HTTPS)를 한 VM에서 구동
-# 사용: sudo docker compose up -d --build  (초기 설정은 setup.sh, 갱신은 redeploy.sh)
+# app은 VM에서 컴파일하지 않는다 — 로컬 PC에서 미리 빌드한 jar(app.jar)를 담기만 한다 (Dockerfile.runtime).
+# 배포는 로컬에서 local-deploy.ps1 실행 (빌드 → 전송 → 이 compose까지 원격 실행). 초기 설정은 setup.sh 참조.
 # .env 파일로 설정 (같은 폴더, 최초 1회):
 #   DB_PASSWORD=...                 DB는 외부 미노출이라 기본값(gaia)도 무방
 #   DOMAIN=your-name.duckdns.org    HTTPS 적용할 도메인 (DuckDNS 등 무료 도메인, 필수 — README HTTPS 섹션 참조)
@@ -21,7 +22,8 @@ services:
 
   app:
     build:
-      context: ../..
+      context: .
+      dockerfile: Dockerfile.runtime
     restart: unless-stopped
     depends_on:
       db:
