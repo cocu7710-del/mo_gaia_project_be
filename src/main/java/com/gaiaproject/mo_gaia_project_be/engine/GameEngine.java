@@ -1728,9 +1728,13 @@ public class GameEngine {
             throw new EngineException("보유하지 않은 연방 토큰입니다: " + token);
         }
         Object source = top.getContext().get("source");
+        // 재수령 보상은 최초 결성(FEDERATION)이 아니라 실제로 그 보상을 트리거한 액션 종류로 잡는다 —
+        // 함대 액션(TWILIGHT_FED)은 함대 칸, 인공물(ARTIFACT_13)은 인공물 칸
+        String vpCategory = "ARTIFACT_13".equals(source) ? "ARTIFACT" : "FLEET";
         Map<String, Object> before = resourceSnapshot(p);
         state.getDecisionStack().remove(top);
-        applyFederationTileEffects(state, submit.playerId(), findTile(data.tiles().get("federationTiles"), token));
+        applyFederationTileEffects(state, submit.playerId(),
+                findTile(data.tiles().get("federationTiles"), token), vpCategory);
 
         Map<String, Object> effects = new LinkedHashMap<>();
         effects.put("token", token);
@@ -2246,14 +2250,15 @@ public class GameEngine {
         if (!tile.path("usable").asBoolean(true)) {
             p.getUsedFederationTokens().add(tileId);
         }
-        applyFederationTileEffects(state, playerId, tile);
+        applyFederationTileEffects(state, playerId, tile, "FEDERATION");
         roundScore(state, p, "FEDERATION_FORMED", 1);
     }
 
-    /** 연방 타일의 보상·특수 효과 — 최초 획득과 재수령(TWILIGHT_FED, ARTIFACT_13)이 공유 */
-    private void applyFederationTileEffects(GameState state, String playerId, JsonNode tile) {
+    /** 연방 타일의 보상·특수 효과 — 최초 획득과 재수령(TWILIGHT_FED, ARTIFACT_13)이 공유.
+     * vpCategory: 점수 상세(vpBreakdown)에 어느 칸으로 잡을지 — 최초 획득은 FEDERATION, 재수령은 그 출처(FLEET/ARTIFACT)를 따른다 */
+    private void applyFederationTileEffects(GameState state, String playerId, JsonNode tile, String vpCategory) {
         if (tile.has("gain")) {
-            gainResources(state, playerId, tile.get("gain"), "FEDERATION");
+            gainResources(state, playerId, tile.get("gain"), vpCategory);
         }
         switch (tile.path("special").asText("")) {
             case "GAIN_TECH_TILE" -> pushDecision(state, "CHOOSE_TECH_TILE", playerId, Map.of());
