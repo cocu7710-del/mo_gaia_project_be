@@ -1626,7 +1626,7 @@ public class GameEngine {
                 if (p.getFederationTokens().isEmpty()) {
                     throw new EngineException("보유한 연방 토큰이 없어 사용할 수 없는 액션입니다");
                 }
-                pushed.add(pushDecision(state, "CHOOSE_FED_TOKEN_REUSE", submit.playerId(), Map.of()));
+                pushed.add(pushDecision(state, "CHOOSE_FED_TOKEN_REUSE", submit.playerId(), Map.of("source", "TWILIGHT_FED")));
             }
             case "ACQUIRE_ARTIFACT" -> pushed.add(pushDecision(state, "CHOOSE_ARTIFACT", submit.playerId(), Map.of()));
             default -> { }
@@ -1727,13 +1727,16 @@ public class GameEngine {
         if (token == null || !p.getFederationTokens().contains(token)) {
             throw new EngineException("보유하지 않은 연방 토큰입니다: " + token);
         }
+        Object source = top.getContext().get("source");
         Map<String, Object> before = resourceSnapshot(p);
         state.getDecisionStack().remove(top);
         applyFederationTileEffects(state, submit.playerId(), findTile(data.tiles().get("federationTiles"), token));
 
-        return List.of(event("DECISION_RESOLVED", submit,
-                Map.of("token", token,
-                        "resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), List.of()));
+        Map<String, Object> effects = new LinkedHashMap<>();
+        effects.put("token", token);
+        if (source != null) effects.put("source", source);
+        effects.put("resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p))));
+        return List.of(event("DECISION_RESOLVED", submit, effects, List.of()));
     }
 
     private List<EngineEvent> applyChooseArtifact(GameState state, Submit submit) {
@@ -1790,7 +1793,7 @@ public class GameEngine {
                 gainVp(p, 3 * count, "ARTIFACT");
             }
             case "VP_3_PLUS_1_PER_PLANET_TYPE" -> gainVp(p, 3 + planetTypesWithArtifacts(state, submit.playerId()), "ARTIFACT");
-            case "FEDERATION_TOKEN_DOUBLE_USE" -> pushDecision(state, "CHOOSE_FED_TOKEN_REUSE", submit.playerId(), Map.of());
+            case "FEDERATION_TOKEN_DOUBLE_USE" -> pushDecision(state, "CHOOSE_FED_TOKEN_REUSE", submit.playerId(), Map.of("source", "ARTIFACT_13"));
             default -> { }
         }
 
@@ -3275,6 +3278,9 @@ public class GameEngine {
                                      List<Map<String, Object>> pushedDecisions) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("input", submit.payload());
+        // 결정 응답류(DECISION_RESOLVED)는 이벤트 타입이 전부 동일해 어떤 결정에 대한 응답인지
+        // 구분이 안 됐다 — 제출 타입(예: TERRANS_GAIA_CONVERT, CHOOSE_TRACK_ADVANCE)을 그대로 남겨 FE 로그가 구분해 표시할 수 있게 한다
+        payload.put("decisionType", submit.type());
         Map<String, Object> allEffects = new LinkedHashMap<>(effects);
         if (!pushedDecisions.isEmpty()) {
             allEffects.put("pushedDecisions", pushedDecisions);
