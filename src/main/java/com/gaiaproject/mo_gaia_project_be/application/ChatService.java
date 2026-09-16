@@ -1,10 +1,8 @@
 package com.gaiaproject.mo_gaia_project_be.application;
 
 import com.gaiaproject.mo_gaia_project_be.infra.jpa.GameChatEntity;
-import com.gaiaproject.mo_gaia_project_be.infra.jpa.GamePlayerEntity;
 import com.gaiaproject.mo_gaia_project_be.infra.jpa.UserAccountEntity;
 import com.gaiaproject.mo_gaia_project_be.infra.repo.GameChatRepository;
-import com.gaiaproject.mo_gaia_project_be.infra.repo.GamePlayerRepository;
 import com.gaiaproject.mo_gaia_project_be.infra.repo.GameRepository;
 import com.gaiaproject.mo_gaia_project_be.infra.repo.UserRepository;
 import org.springframework.beans.factory.ObjectProvider;
@@ -18,22 +16,21 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/** 게임/방 채팅 — 방(WAITING)과 진행 게임 모두 같은 채널. 참가자만 발신, /topic/game/{id}/chat 브로드캐스트. */
+/** 게임/방 채팅 — 방(WAITING)과 진행 게임 모두 같은 채널. 로그인한 누구나(관전자 포함) 발신·열람 가능
+ * (game-spec 12-6, 관전 채팅 허용) — /topic/game/{id}/chat 브로드캐스트. */
 @Service
 public class ChatService {
 
     public record ChatView(long seq, UUID userId, String nickname, String message, OffsetDateTime createdAt) {}
 
     private final GameRepository games;
-    private final GamePlayerRepository players;
     private final GameChatRepository chats;
     private final UserRepository users;
     private final ObjectProvider<SimpMessagingTemplate> messaging;
 
-    public ChatService(GameRepository games, GamePlayerRepository players, GameChatRepository chats,
+    public ChatService(GameRepository games, GameChatRepository chats,
                        UserRepository users, ObjectProvider<SimpMessagingTemplate> messaging) {
         this.games = games;
-        this.players = players;
         this.chats = chats;
         this.users = users;
         this.messaging = messaging;
@@ -43,9 +40,6 @@ public class ChatService {
     public ChatView send(UUID gameId, UUID userId, String message) {
         games.findByIdForUpdate(gameId) // 게임 락으로 seq 직렬화
                 .orElseThrow(() -> new IllegalArgumentException("게임 없음: " + gameId));
-        if (players.findById(new GamePlayerEntity.Key(gameId, userId)).isEmpty()) {
-            throw new IllegalStateException("게임 참가자만 채팅할 수 있습니다");
-        }
         long seq = chats.findFirstByGameIdOrderBySeqDesc(gameId).map(c -> c.getSeq() + 1).orElse(1L);
         chats.save(GameChatEntity.builder()
                 .gameId(gameId).seq(seq).userId(userId).message(message)
@@ -57,12 +51,8 @@ public class ChatService {
         return view;
     }
 
-    /** 채팅 열람도 참가자 전용 — 관전자는 채팅 접근 불가 (game-spec 12-6) */
     @Transactional(readOnly = true)
-    public List<ChatView> history(UUID gameId, UUID userId, long afterSeq) {
-        if (players.findById(new GamePlayerEntity.Key(gameId, userId)).isEmpty()) {
-            throw new IllegalStateException("게임 참가자만 채팅을 볼 수 있습니다");
-        }
+    public List<ChatView> history(UUID gameId, long afterSeq) {
         return chats.findTop100ByGameIdAndSeqGreaterThanOrderBySeq(gameId, afterSeq)
                 .stream().map(this::toView).toList();
     }

@@ -320,17 +320,18 @@ class GameFlowIntegrationTest {
         chatService.send(gameId, c1, "안녕하세요");
         chatService.send(gameId, c1, "두 번째");
 
-        // 비참가자 발신·열람 모두 거부 (관전자 채팅 불가)
+        // 비참가자(관전자)도 발신·열람 모두 가능 (game-spec 12-6, 관전 채팅 허용)
         UUID outsider = users.save(UserAccountEntity.builder()
                 .email("out@test").passwordHash("-").nickname("outsider").build()).getId();
-        assertThrows(IllegalStateException.class, () -> chatService.send(gameId, outsider, "끼어들기"));
-        assertThrows(IllegalStateException.class, () -> chatService.history(gameId, outsider, 0));
+        chatService.send(gameId, outsider, "구경 중이에요");
 
-        List<ChatService.ChatView> history = chatService.history(gameId, c1, 0);
-        assertEquals(2, history.size());
+        List<ChatService.ChatView> history = chatService.history(gameId, 0);
+        assertEquals(3, history.size());
         assertEquals("안녕하세요", history.get(0).message());
         assertEquals("c1", history.get(0).nickname());
-        assertEquals(1, chatService.history(gameId, c1, 1).size()); // afterSeq 필터
+        assertEquals("구경 중이에요", history.get(2).message());
+        assertEquals("outsider", history.get(2).nickname());
+        assertEquals(2, chatService.history(gameId, 1).size()); // afterSeq 필터
 
         List<Map<String, Object>> events = service.loadEvents(gameId, 1);
         assertFalse(events.isEmpty());
