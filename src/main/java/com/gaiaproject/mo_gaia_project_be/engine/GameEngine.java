@@ -2438,7 +2438,9 @@ public class GameEngine {
     private boolean hasOpponentBuildingNear(GameState state, String playerId, HexCoord target, int radius) {
         for (Map.Entry<String, HexState> e : state.getHexes().entrySet()) {
             HexState h = e.getValue();
-            boolean opponentBuilding = h.hasBuilding() && !playerId.equals(h.getBuildingOwner());
+            // 가이아포머는 건물이 아니다 — 인접 할인 대상에서 제외 (hasBuildingOf와 동일 원칙)
+            boolean opponentBuilding = h.hasBuilding() && !"GAIAFORMER".equals(h.getBuildingType())
+                    && !playerId.equals(h.getBuildingOwner());
             // 란티다 기생 광산도 상대 건물로 취급 — 교역소 인접 할인 대상 (검은 행성 광산은 buildingOwner로 이미 포함)
             boolean opponentParasite = h.getParasiteOwner() != null && !playerId.equals(h.getParasiteOwner());
             if ((opponentBuilding || opponentParasite)
