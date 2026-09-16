@@ -119,7 +119,7 @@
     },
     {
       "id": "TINKEROIDS", "nameKo": "팅커로이드", "homePlanet": "ASTEROIDS",
-      "start": { "credits": 15, "ore": 4, "knowledge": 2, "qic": 1, "bowl1": 4, "bowl2": 4, "bowl3": 0, "vp": 10 },
+      "start": { "credits": 15, "ore": 4, "knowledge": 2, "qic": 1, "bowl1": 4, "bowl2": 2, "bowl3": 0, "vp": 10 },
       "startTracks": { "science": 1 },
       "setup": { "placePiInsteadOfMines": true },
       "abilities": ["TERRAFORM_HOME_3_OTHERS_1", "PI_PERSONAL_ACTION_TILES"],
