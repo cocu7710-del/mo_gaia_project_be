@@ -529,19 +529,23 @@ public class GameEngine {
 
         // 트랙 전진: 트랙 슬롯 타일 → 해당 트랙, COMMON/EXPANSION/고급 → 선택 트랙 (미지정 시 스킵)
         String advanceTarget = !advanced && TRACK_NAMES.contains(position) ? position : chosenTrack;
+        boolean advancedNow = false;
         if (advanceTarget != null) {
             if (state.getDecisionStack().size() > stackBefore) {
                 // 즉시 효과가 결정(무료 광산)을 밀어 넣었으면 그 연쇄를 먼저 끝낸다 —
                 // 트랙 보상(QIC·사거리)을 그 광산에 앞당겨 쓰지 못하게 (순서: 타일 효과 → 트랙 전진)
+                // → 이 경우 트랙 전진 결과는 그 연쇄가 끝나는 이벤트(applyFreeMine)에 실린다
                 p.setPendingTechTrackAdvance(advanceTarget);
             } else {
-                advanceTrackIfPossible(state, submit.playerId(), advanceTarget);
+                advancedNow = advanceTrackIfPossible(state, submit.playerId(), advanceTarget);
             }
         }
 
-        return List.of(event("DECISION_RESOLVED", submit,
-                Map.of("tile", tileId,
-                        "resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), List.of()));
+        Map<String, Object> effects = new LinkedHashMap<>();
+        effects.put("tile", tileId);
+        if (advancedNow) effects.put("track", advanceTarget);
+        effects.put("resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p))));
+        return List.of(event("DECISION_RESOLVED", submit, effects, List.of()));
     }
 
     private String acquireBasicTile(GameState state, Submit submit, PlayerState p, String position) {
@@ -644,26 +648,28 @@ public class GameEngine {
     // ═══════════════ 트랙 전진 (타일 무료 전진 공용) ═══════════════
 
     /** 무료 전진 — 5단계 점유/연방 토큰 부족/발타크 항해 잠금 시 전진만 스킵 (타일은 이미 획득, edge-cases §3) */
-    private void advanceTrackIfPossible(GameState state, String playerId, String track) {
+    /** @return 실제로 전진했는지 — 로그에 결과를 남길지 판단하는 데 쓰인다 (막혀서 아무 일도 없었으면 false) */
+    private boolean advanceTrackIfPossible(GameState state, String playerId, String track) {
         PlayerState p = state.player(playerId);
         if (navigationLocked(state, playerId, track)) {
-            return; // 발타크: PI 건설 전 항해 전진 불가 (I-12)
+            return false; // 발타크: PI 건설 전 항해 전진 불가 (I-12)
         }
         int level = p.track(track);
         if (level >= 5) {
-            return;
+            return false;
         }
         if (level + 1 == 5) {
             if (state.getBoard().getTrackLevel5Occupied().containsKey(track)) {
-                return;
+                return false;
             }
             if (!hasUsableFederationToken(p)) {
-                return;
+                return false;
             }
             flipUsableFederationToken(p);
             state.getBoard().getTrackLevel5Occupied().put(track, playerId);
         }
         applyTrackAdvance(state, playerId, track, level + 1);
+        return true;
     }
 
     /** 발타크 항해 잠금 — PI 건설 전에는 유료·무료 어떤 경로로도 항해 트랙 전진 불가 (I-12) */
@@ -1878,20 +1884,24 @@ public class GameEngine {
         state.getDecisionStack().remove(top);
         List<Map<String, Object>> pushed = buildMineCore(state, submit,
                 intOf(submit.payload(), "qicForRange"), freeShovels, freeBuild, rangeBonus, planetOnly);
-        resolvePendingTechTrackAdvance(state, submit.playerId());
+        String advancedTrack = resolvePendingTechTrackAdvance(state, submit.playerId());
 
-        return List.of(event("DECISION_RESOLVED", submit,
-                Map.of("resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p)))), pushed));
+        Map<String, Object> effects = new LinkedHashMap<>();
+        if (advancedTrack != null) effects.put("track", advancedTrack);
+        effects.put("resources", Map.of(submit.playerId(), diff(before, resourceSnapshot(p))));
+        return List.of(event("DECISION_RESOLVED", submit, effects, pushed));
     }
 
-    /** 기술 타일 즉시 효과로 미뤄둔 트랙 전진을 적용 — 효과 연쇄(무료 광산)가 끝난 직후 호출 */
-    private void resolvePendingTechTrackAdvance(GameState state, String playerId) {
+    /** 기술 타일 즉시 효과로 미뤄둔 트랙 전진을 적용 — 효과 연쇄(무료 광산)가 끝난 직후 호출.
+     * @return 실제로 전진한 트랙(로그 표시용) — 없거나 막혔으면 null */
+    private String resolvePendingTechTrackAdvance(GameState state, String playerId) {
         PlayerState p = state.player(playerId);
         String track = p.getPendingTechTrackAdvance();
         if (track != null) {
             p.setPendingTechTrackAdvance(null);
-            advanceTrackIfPossible(state, playerId, track);
+            return advanceTrackIfPossible(state, playerId, track) ? track : null;
         }
+        return null;
     }
 
     private List<EngineEvent> applyPlaceBlackPlanet(GameState state, Submit submit) {
