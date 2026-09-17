@@ -702,8 +702,9 @@ public class GameEngine {
                 }
                 case "PLACE_BLACK_PLANET" -> state.getDecisionStack().add(
                         new Decision(state.newDecisionId(), "PLACE_BLACK_PLANET", playerId, Map.of()));
+                // 가이아포밍 트랙 5레벨 완주 보너스는 연구 트랙 칸이 아니라 기본 점수 칸으로 (2026-09-17 변경)
                 case "VP_4_PLUS_1_PER_GAIA_PLANET" ->
-                        gainVp(p, 4 + gaiaPlanetCount(state, playerId), "TRACK");
+                        gainVp(p, 4 + gaiaPlanetCount(state, playerId), "TECH_BASIC");
                 default -> { }
             }
         } else if (newLevel == 5 && trackNode.has("level5Gain")) {
@@ -1616,9 +1617,10 @@ public class GameEngine {
         List<Map<String, Object>> pushed = new ArrayList<>();
         switch (action.path("special").asText("")) {
             // 고급 타일이 덮은 기본 타일은 별개 타일로 세지 않는다 (덮인 타일 수만큼 차감)
+            // QIC 액션(파순 2·3 등) 자체가 주는 VP는 함대(FLEET)가 아니라 QIC 액션 칸으로 집계 (2026-09-17 변경)
             case "VP_2_PLUS_1_PER_TECH_TILE" ->
-                    gainVp(p, 2 + p.getTechTiles().size() - p.getCoveredTechTiles().size(), "FLEET");
-            case "VP_2_PLUS_1_PER_PLANET_TYPE" -> gainVp(p, 2 + planetTypesWithArtifacts(state, submit.playerId()), "FLEET");
+                    gainVp(p, 2 + p.getTechTiles().size() - p.getCoveredTechTiles().size(), "QIC_ACTION");
+            case "VP_2_PLUS_1_PER_PLANET_TYPE" -> gainVp(p, 2 + planetTypesWithArtifacts(state, submit.playerId()), "QIC_ACTION");
             case "INSTANT_GAIAFORM" -> instantGaiaform(state, submit);
             case "BUILD_MINE_TERRAFORM_1_FREE" -> pushed.add(pushFreeMine(state, submit.playerId(), 1, false, 0, null));
             // 트랙은 액션 확정 후 CHOOSE_TRACK_ADVANCE 결정으로 선택 (파이락 의회와 동일 플로우)
@@ -1735,8 +1737,8 @@ public class GameEngine {
         }
         Object source = top.getContext().get("source");
         // 재수령 보상은 최초 결성(FEDERATION)이 아니라 실제로 그 보상을 트리거한 액션 종류로 잡는다 —
-        // 함대 액션(TWILIGHT_FED)은 함대 칸, 인공물(ARTIFACT_13)은 인공물 칸
-        String vpCategory = "ARTIFACT_13".equals(source) ? "ARTIFACT" : "FLEET";
+        // 트와일라잇(TWILIGHT_FED)은 QIC 액션이라 QIC 액션 칸, 인공물(ARTIFACT_13)은 인공물 칸 (2026-09-17 변경)
+        String vpCategory = "ARTIFACT_13".equals(source) ? "ARTIFACT" : "QIC_ACTION";
         Map<String, Object> before = resourceSnapshot(p);
         state.getDecisionStack().remove(top);
         applyFederationTileEffects(state, submit.playerId(),
@@ -2719,8 +2721,9 @@ public class GameEngine {
             gains.put("credits", income.credits());
             gains.put("ore", income.ore());
             gains.put("knowledge", income.knowledge());
-            gains.put("vp", income.vp());
             gainResources(state, playerId, toNode(gains), "INCOME");
+            // 경제 트랙 3·4레벨 A안의 VP 옵션 — 수입(INCOME)이 아니라 기본 점수 칸으로 (2026-09-17 변경)
+            gainVp(p, income.vp(), "TECH_BASIC");
             addQic(state, playerId, income.qic());
 
             if (income.charge() > 0 && income.tokens() > 0 && powerOrderMatters(p, income)) {
