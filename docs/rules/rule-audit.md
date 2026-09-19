@@ -635,10 +635,10 @@
   - ★ 시작 10
   - ① 라운드 점수 1R~6R **각각** (ROUND_1~6)
   - ② 부스터 패스 점수 1R~6R **각각** (PASS_1~6)
-  - ③ 기본 기술 타일 (TECH_BASIC — 7VP 타일, 가이아 광산 건설 +3VP 등)
+  - ③ 기본 점수 (TECH_BASIC — 기본 기술 타일(7VP 타일, 가이아 광산 건설 +3VP 등) + 가이아포밍 트랙 5레벨 완주 보너스(4+가이아 행성당 1VP) + 경제 트랙 3·4레벨 A안 수입 VP, 2026-09-17 통합)
   - ④ 고급 기술 타일 (TECH_ADV — 즉시형·패시브형·패스 발동형 합)
-  - ④-1 QIC 액션 VP (QIC_ACTION — 고급㉑ "QIC 액션마다 4VP"만 별도 표시)
-  - ⑤ 연구 트랙 = TRACK(가이아 5레벨 등 진행 중 트랙 보상) + FINAL_TRACK(레벨 3+ 칸당 4VP) + INCOME(경제 A안 수입 VP)
+  - ④-1 QIC 액션 VP (QIC_ACTION — 고급㉑ "QIC 액션마다 4VP" + QIC 코스트 함대 액션 자체가 주는 VP(TF_MARS_VP·ECLIPSE_VP·트와일라잇 연방 재수령) 전부, 2026-09-17 확대)
+  - ⑤ 연구 트랙 = TRACK(진행 중 트랙 보상, 가이아 5레벨 보너스는 ③으로 이동) + FINAL_TRACK(레벨 3+ 칸당 4VP) + INCOME(경제 A안 VP는 ③으로 이동해 현재는 없음)
   - ⑥ 연방 (FEDERATION) ⑦ 인공물 (ARTIFACT) ⑧ 종족 (FACTION) ⑧-1 초월 차원 (TRANSCENDENT — 광산 건설당 6VP, C-2)
   - ⑨ 최종 점수 타일 1+2 합 (FINAL_RANK)
   - ⑩ 남은 자원 (FINAL_RESOURCES)
