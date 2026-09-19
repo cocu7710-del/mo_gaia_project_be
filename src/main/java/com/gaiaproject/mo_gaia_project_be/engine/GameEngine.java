@@ -1783,7 +1783,7 @@ public class GameEngine {
                 // 가상 행성 종류 추가는 실제로 처음 개척하는 종류일 때만 "새 종류" 발동 —
                 // 소행성이 홈 행성인 종족(팅커로이드·다카니안)은 이미 개척된 종류라 중복 발동하면 안 된다
                 if (!colonizedPlanetTypes(state, submit.playerId()).contains("ASTEROIDS")) {
-                    roundScore(state, p, "NEW_PLANET_TYPE_COLONIZED", 1);
+                    newColonizationTriggers(state, submit.playerId(), false, true, null);
                 }
                 techMineBuildVp(p, false);
             }
@@ -1792,7 +1792,7 @@ public class GameEngine {
                 roundScore(state, p, "MINE_PLACED", 1);
                 // 초월 차원이 홈 행성인 종족(스페이스 자이언트·모웨이드)은 이미 개척된 종류라 중복 발동하면 안 된다
                 if (!colonizedPlanetTypes(state, submit.playerId()).contains("TRANSCENDENT")) {
-                    roundScore(state, p, "NEW_PLANET_TYPE_COLONIZED", 1);
+                    newColonizationTriggers(state, submit.playerId(), false, true, null);
                 }
                 techMineBuildVp(p, false);
             }

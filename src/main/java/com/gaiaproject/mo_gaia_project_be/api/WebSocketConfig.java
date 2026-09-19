@@ -1,8 +1,11 @@
 package com.gaiaproject.mo_gaia_project_be.api;
 
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
@@ -30,8 +33,20 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.enableSimpleBroker("/topic");
+        // 하트비트 없으면 프록시·NAT에서 close 프레임 없이 조용히 끊긴 연결을 감지 못해 재연결이 안 된다
+        registry.enableSimpleBroker("/topic")
+                .setHeartbeatValue(new long[] {10000, 10000})
+                .setTaskScheduler(heartbeatTaskScheduler());
         registry.setApplicationDestinationPrefixes("/app");
+    }
+
+    @Bean
+    public TaskScheduler heartbeatTaskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("ws-heartbeat-");
+        scheduler.initialize();
+        return scheduler;
     }
 
     @Override
