@@ -2424,8 +2424,10 @@ public class GameEngine {
                 + (hasActiveTile(p, "BASIC_EXP_TILE_1") ? 1 : 0); // 확장 기본 타일: 기본 거리 +1
         int best = Integer.MAX_VALUE;
         for (Map.Entry<String, HexState> e : state.getHexes().entrySet()) {
-            if (playerId.equals(e.getValue().getBuildingOwner())
-                    || playerId.equals(e.getValue().getParasiteOwner())) {
+            HexState h = e.getValue();
+            // 가이아포머는 건물이 아니다 — 항해 거리 기준점에서도 제외 (hasBuildingOf와 동일 원칙)
+            boolean myBuilding = playerId.equals(h.getBuildingOwner()) && !"GAIAFORMER".equals(h.getBuildingType());
+            if (myBuilding || playerId.equals(h.getParasiteOwner())) {
                 best = Math.min(best, HexCoord.parse(e.getKey()).distance(target));
             }
         }
@@ -2698,11 +2700,13 @@ public class GameEngine {
         state.getDecisionStack().remove(top);
         p.setGaiaPower(0);
         p.setBowl1(p.getBowl1() + tokens - sacrifice * 4); // 희생분은 영구 제거
+        // pushed에 담아야 FE 로그가 뒤이은 기술 타일 선택(어떤 타일을 가져갔는지)을 이 이벤트와 한 줄로 묶어 보여준다
+        List<Map<String, Object>> pushed = new ArrayList<>();
         for (int i = 0; i < sacrifice; i++) {
-            pushDecision(state, "CHOOSE_TECH_TILE", submit.playerId(), Map.of());
+            pushed.add(pushDecision(state, "CHOOSE_TECH_TILE", submit.playerId(), Map.of()));
         }
         return List.of(event("DECISION_RESOLVED", submit,
-                Map.of("sacrificed", sacrifice * 4, "techTiles", sacrifice), List.of()));
+                Map.of("sacrificed", sacrifice * 4, "techTiles", sacrifice), pushed));
     }
 
     // ═══════════════ 수입 페이즈 ═══════════════
