@@ -50,7 +50,7 @@ Docker 설치 → 인스턴스 방화벽 개방 → 소스 클론 → DB+앱 빌
 1. 로컬에서 평소처럼 커밋 (FE 변경은 `npm run deploy-be`로 static 동기화 포함) → `git push`
 2. 로컬 PowerShell에서:
    ```powershell
-   powershell -File deploy\oracle\local-deploy.ps1 -KeyPath C:\path\to\ssh-key.key
+   powershell -File deploy\oracle\local-deploy.ps1 -KeyPath C:\Users\DM\.ssh\ssh-key-2026-08-10.key
    ```
    (로컬 빌드 → VM으로 jar 전송 → 원격 이미지 재빌드+재기동까지 한 번에 처리)
 
