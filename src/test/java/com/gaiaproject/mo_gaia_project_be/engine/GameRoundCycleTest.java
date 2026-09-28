@@ -9,6 +9,7 @@ import com.gaiaproject.mo_gaia_project_be.engine.rules.GameData;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -154,6 +155,45 @@ class GameRoundCycleTest {
                 Map.of("hexQ", target.q(), "hexR", target.r(), "qicForRange", 0)));
         assertEquals("MINE", state.getHexes().get(transdimKey).getBuildingType());
         assertEquals(1, p1.stockOf("GAIAFORMER"));
+        assertEquals(qicBefore, p1.getQic());
+    }
+
+    @Test
+    void 자기_포머가_있는_가이아_행성은_멀리_떨어져_있어도_거리_QIC_없이_건설된다() {
+        GameState state = readyGame();
+        PlayerState p1 = state.player("p1");
+        p1.getTracks().put("GAIA_FORMING", 1);
+        p1.getStock().put("GAIAFORMER", 1);
+        p1.setBowl1(4);
+        p1.setBowl2(4);
+        p1.setQic(50);
+        p1.setCredits(50);
+        p1.setOre(50);
+
+        String homeKey = findHex(state, h -> "p1".equals(h.getBuildingOwner()));
+        HexCoord home = HexCoord.parse(homeKey);
+        // p1의 건물에서 가장 먼 차원변형 행성 — 회수 시 다시 거리를 확인한다면 실패할 자리
+        String transdimKey = state.getHexes().entrySet().stream()
+                .filter(e -> "TRANSDIM".equals(e.getValue().getPlanet()) && !e.getValue().hasBuilding())
+                .max(Comparator.comparingInt(e -> HexCoord.parse(e.getKey()).distance(home)))
+                .map(Map.Entry::getKey).orElseThrow();
+        HexCoord target = HexCoord.parse(transdimKey);
+
+        int qic = EngineTestSupport.qicForRange(state, "p1", target, 1);
+        engine.apply(state, new GameEngine.Submit("p1", "ACTION_GAIAFORM", null,
+                Map.of("hexQ", target.q(), "hexR", target.r(), "qicForRange", qic)));
+        EngineTestSupport.endTurn(engine, state);
+
+        passAll(state);
+        resolveIncomeDecisions(state);
+        assertEquals("GAIA", state.getHexes().get(transdimKey).getPlanet());
+
+        state.setActivePlayer("p1");
+        int qicBefore = p1.getQic();
+        // 실제 거리를 무시하고 0을 보내도(=FE가 항상 보내는 값) 성공해야 한다 — 이미 포머로 가 있는 자리라 재확인 불필요
+        engine.apply(state, new GameEngine.Submit("p1", "ACTION_BUILD_MINE", null,
+                Map.of("hexQ", target.q(), "hexR", target.r(), "qicForRange", 0)));
+        assertEquals("MINE", state.getHexes().get(transdimKey).getBuildingType());
         assertEquals(qicBefore, p1.getQic());
     }
 

@@ -342,11 +342,14 @@ public class GameEngine {
         if (p.stockOf("MINE") < 1) {
             throw new EngineException("광산 재고가 없습니다");
         }
-        checkRange(state, submit.playerId(), target, p, qicForRange, rangeBonus);
+        // 포머 회수는 이미 그 자리에 가 있는 것이므로 거리를 다시 확인하지 않는다 (멀어도 무관)
+        if (!ownGaiaformer) {
+            checkRange(state, submit.playerId(), target, p, qicForRange, rangeBonus);
+        }
 
         int credits = freeBuild || asteroidFormerBurn ? 0 : 2;
         int ore = freeBuild || asteroidFormerBurn ? 0 : 1;
-        int qic = qicForRange;
+        int qic = ownGaiaformer ? 0 : qicForRange;
         int rawShovels = 0;
         boolean gaia = "GAIA".equals(planet);
         if (gaia) {
