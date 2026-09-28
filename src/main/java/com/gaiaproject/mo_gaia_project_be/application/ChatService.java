@@ -13,6 +13,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.OffsetDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -53,8 +54,9 @@ public class ChatService {
 
     @Transactional(readOnly = true)
     public List<ChatView> history(UUID gameId, long afterSeq) {
-        return chats.findTop100ByGameIdAndSeqGreaterThanOrderBySeq(gameId, afterSeq)
-                .stream().map(this::toView).toList();
+        List<GameChatEntity> latest = chats.findTop100ByGameIdAndSeqGreaterThanOrderBySeqDesc(gameId, afterSeq);
+        Collections.reverse(latest);
+        return latest.stream().map(this::toView).toList();
     }
 
     private ChatView toView(GameChatEntity chat) {

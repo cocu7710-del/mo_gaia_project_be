@@ -111,7 +111,7 @@ public class RoomController {
         return Map.of("status", "ok");
     }
 
-    /** 방장 전용 — 시작 전 방 삭제 */
+    /** 방장 전용 — 대기 방 또는 진행 중인 게임 삭제 */
     @DeleteMapping("/{roomId}")
     public Map<String, String> delete(@PathVariable UUID roomId, Authentication auth) {
         rooms.deleteRoom(roomId, currentUserId(auth));

@@ -135,8 +135,8 @@ public class RoomService {
     }
 
     /**
-     * 방장 전용 — 대기 방 삭제, 또는 진행 중(SETUP/PLAYING)인 1인 플레이 게임 삭제.
-     * 종료(FINISHED)된 게임이나 진행 중인 일반(다인) 게임은 삭제 대상이 아니다.
+     * 방장 전용 — 대기 방 삭제, 또는 진행 중(SETUP/PLAYING)인 게임 삭제(1인 플레이·다인 공통).
+     * 종료(FINISHED)된 게임은 삭제 대상이 아니다.
      */
     @Transactional
     public void deleteRoom(UUID roomId, UUID requesterId) {
@@ -146,14 +146,14 @@ public class RoomService {
             throw new IllegalStateException("방장만 삭제할 수 있습니다");
         }
         boolean waiting = "WAITING".equals(game.getStatus());
-        boolean ongoingLocal = isLocalMode(game) && List.of("SETUP", "PLAYING").contains(game.getStatus());
-        if (!waiting && !ongoingLocal) {
-            throw new IllegalStateException("대기 중인 방 또는 진행 중인 1인 플레이 게임만 삭제할 수 있습니다");
+        boolean ongoing = List.of("SETUP", "PLAYING").contains(game.getStatus());
+        if (!waiting && !ongoing) {
+            throw new IllegalStateException("대기 중인 방 또는 진행 중인 게임만 삭제할 수 있습니다");
         }
         broadcastRoomChange(roomId); // 커밋 후 알림 → 멤버 FE가 조회 실패로 로비 복귀
         players.deleteAll(players.findByGameIdOrderBySeatNo(roomId));
         chats.deleteByGameId(roomId);
-        if (ongoingLocal) {
+        if (ongoing) {
             pendingDecisions.deleteByGameId(roomId);
             events.deleteByGameId(roomId);
             snapshots.deleteByGameId(roomId);

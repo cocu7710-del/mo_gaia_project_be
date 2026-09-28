@@ -613,7 +613,7 @@ public class GameEngine {
         switch (tile.path("special").asText("")) {
             case "KNOWLEDGE_1_PER_PLANET_TYPE" -> {
                 PlayerState p = state.player(playerId);
-                p.setKnowledge(p.getKnowledge() + colonizedPlanetTypes(state, playerId).size());
+                p.setKnowledge(p.getKnowledge() + planetTypesWithArtifacts(state, playerId));
             }
             case "TERRAFORM_2_PLACE_MINE" -> {
                 Decision d = new Decision(state.newDecisionId(), "PLACE_MINE", playerId,
