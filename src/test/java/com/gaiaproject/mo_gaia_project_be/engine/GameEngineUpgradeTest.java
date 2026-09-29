@@ -130,8 +130,8 @@ class GameEngineUpgradeTest {
         var preview = engine.finalScorePreview(state);
         for (String pid : state.getPlayers().keySet()) {
             var v = preview.get(pid);
-            int expected = state.player(pid).getVp() + v.get("rank") + v.get("track")
-                    + v.get("resources") - v.get("bid");
+            // 자원은 게임 중 변동이 심해 합계 미리보기에는 반영하지 않는다 (게임 종료 후에만 실제로 더해짐)
+            int expected = state.player(pid).getVp() + v.get("rank") + v.get("track") - v.get("bid");
             assertEquals(expected, (int) v.get("projectedTotal"));
         }
         assertEquals(2, (int) preview.get("p1").get("bid"));

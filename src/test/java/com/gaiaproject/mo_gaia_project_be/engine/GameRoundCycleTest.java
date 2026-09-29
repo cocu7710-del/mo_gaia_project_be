@@ -244,4 +244,54 @@ class GameRoundCycleTest {
             assertEquals(p.getVp(), sum, pid + " vpBreakdown 합계 불일치");
         }
     }
+
+    @Test
+    void 육라운드_종료_시_잔여_자원이_3개당_1점으로_들어온다() {
+        GameState state = readyGame();
+        state.setRound(6);
+        state.getBoard().setFinalScoringTiles(new java.util.ArrayList<>(
+                List.of("FINAL_TILE_MOST_BUILDINGS", "FINAL_TILE_PLANET_TYPES")));
+
+        PlayerState p1 = state.player("p1");
+        p1.setCredits(11);
+        p1.setOre(0);
+        p1.setKnowledge(2);
+        p1.setQic(0);
+        p1.setBowl3(0);
+        int vpBefore = p1.getVp();
+
+        passAll(state);
+
+        assertEquals("FINISHED", state.getPhase());
+        // 11 신용 + 2 지식 = 13, 3개당 1VP → 4VP (내림)
+        assertEquals(4, p1.getVpBreakdown().getOrDefault("FINAL_RESOURCES", 0));
+        assertTrue(p1.getVp() > vpBefore);
+    }
+
+    @Test
+    void 잔여_자원과_비딩값_차감이_동시에_정확히_반영된다() {
+        GameState state = readyGame();
+        state.setRound(6);
+        state.getBoard().setFinalScoringTiles(new java.util.ArrayList<>(
+                List.of("FINAL_TILE_MOST_BUILDINGS", "FINAL_TILE_PLANET_TYPES")));
+
+        PlayerState p1 = state.player("p1");
+        p1.setCredits(11);
+        p1.setOre(0);
+        p1.setKnowledge(2);
+        p1.setQic(0);
+        p1.setBowl3(0);
+        p1.setBidVp(15); // 발타크 15점 낙찰 재현
+        int vpBefore = p1.getVp();
+
+        passAll(state);
+
+        assertEquals("FINISHED", state.getPhase());
+        assertEquals(4, p1.getVpBreakdown().getOrDefault("FINAL_RESOURCES", 0));
+        assertEquals(-15, p1.getVpBreakdown().getOrDefault("BID", 0));
+        // 순위 타일(건물수·행성종류)은 0등분이라 없다고 가정하면 순변화 = 자원(+4) - 비딩(15) = -11
+        int rankAndTrack = p1.getVp() - vpBefore - 4 + 15;
+        assertEquals(rankAndTrack, p1.getVpBreakdown().getOrDefault("FINAL_RANK", 0)
+                + p1.getVpBreakdown().getOrDefault("FINAL_TRACK", 0));
+    }
 }

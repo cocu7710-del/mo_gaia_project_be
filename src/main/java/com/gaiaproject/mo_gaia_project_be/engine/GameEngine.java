@@ -3091,7 +3091,9 @@ public class GameEngine {
             view.put("track", track);
             view.put("resources", resources);
             view.put("bid", p.getBidVp());
-            view.put("projectedTotal", p.getVp() + view.get("rank") + track + resources - p.getBidVp());
+            // 자원은 게임 중 오르내림이 심해 합계 미리보기에서도 뺀다 (FE가 잔여자원 칸을 숨기는 것과 동일한 이유) —
+            // 게임 종료 후 실제 반영될 때 합계가 그만큼 올라가는 걸 보여주기 위함
+            view.put("projectedTotal", p.getVp() + view.get("rank") + track - p.getBidVp());
             result.put(e.getKey(), view);
         }
         return result;
