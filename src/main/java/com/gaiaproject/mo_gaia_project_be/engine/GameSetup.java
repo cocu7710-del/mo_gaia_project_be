@@ -31,11 +31,16 @@ public final class GameSetup {
     private GameSetup() {}
 
     public static GameState create(GameData data, long seed, List<PlayerSeat> seats) {
+        return create(data, seed, seats, false);
+    }
+
+    /** customBalance: 방 생성 시 Custom 옵션 — 제작자 밸런스 패치 적용 (game-spec 3-X) */
+    public static GameState create(GameData data, long seed, List<PlayerSeat> seats, boolean customBalance) {
         if (seats.size() != 4) {
             throw new EngineException("4인 전용 게임입니다 (현재 " + seats.size() + "명)");
         }
         Random rng = new Random(seed);
-        GameState state = newStateWithMapAndBoard(data, seed, rng);
+        GameState state = newStateWithMapAndBoard(data, seed, rng, customBalance);
         initPlayers(data, state, seats);
         // 비딩 없는 게임 — 좌석 종족이 곧 참가 종족 집합이라 셋업에서 바로 확정
         computeThreeShovelPlanets(data, state, seats.stream().map(PlayerSeat::faction).toList());
@@ -47,24 +52,30 @@ public final class GameSetup {
     }
 
     /** 맵 생성 + 보드 드로우 (같은 seed면 비딩·1인 플레이 등 어느 경로든 항상 동일 결과, rule-audit K-1) */
-    private static GameState newStateWithMapAndBoard(GameData data, long seed, Random rng) {
+    private static GameState newStateWithMapAndBoard(GameData data, long seed, Random rng, boolean customBalance) {
         GameState state = new GameState();
         state.setRngSeed(seed);
         state.setPhase("SETUP_MINES");
         state.setRound(0);
+        state.setCustomBalance(customBalance);
         generateMap(data, state, rng.nextLong());
-        drawBoard(data, state.getBoard(), rng);
+        drawBoard(data, state.getBoard(), rng, customBalance);
         return state;
     }
 
     /** 1인 플레이 + 비딩 없음 — 4종족을 무작위로 뽑아(같은 홈행성 중복 없이) playerIds 순서대로 배정 후 바로 SETUP_MINES.
      * 맵·보드 생성 뒤 "같은 rng 이어서" 종족을 뽑아야 같은 seed일 때 비딩 모드의 종족 후보군과 일치한다 (K-1). */
     public static GameState createLocalRandom(GameData data, long seed, List<String> playerIds) {
+        return createLocalRandom(data, seed, playerIds, false);
+    }
+
+    /** customBalance: 방 생성 시 Custom 옵션 — 제작자 밸런스 패치 적용 */
+    public static GameState createLocalRandom(GameData data, long seed, List<String> playerIds, boolean customBalance) {
         if (playerIds.size() != 4) {
             throw new EngineException("4인 전용 게임입니다 (현재 " + playerIds.size() + "명)");
         }
         Random rng = new Random(seed);
-        GameState state = newStateWithMapAndBoard(data, seed, rng);
+        GameState state = newStateWithMapAndBoard(data, seed, rng, customBalance);
         List<JsonNode> shuffled = new ArrayList<>();
         for (JsonNode faction : data.factions()) {
             shuffled.add(faction);
@@ -96,11 +107,17 @@ public final class GameSetup {
 
     /** 비딩 모드 — 종족·턴 순서는 경매로 확정. playerIds = 입장 순서 (1번부터 발언). */
     public static GameState createWithBidding(GameData data, long seed, List<String> playerIds) {
-        return createWithBidding(data, seed, playerIds, false);
+        return createWithBidding(data, seed, playerIds, false, false);
     }
 
     /** turnPick=true(모드 b): 낙찰자가 종족과 함께 원하는 턴 순번을 직접 선택한다 */
     public static GameState createWithBidding(GameData data, long seed, List<String> playerIds, boolean turnPick) {
+        return createWithBidding(data, seed, playerIds, turnPick, false);
+    }
+
+    /** customBalance: 방 생성 시 Custom 옵션 — 제작자 밸런스 패치 적용 */
+    public static GameState createWithBidding(GameData data, long seed, List<String> playerIds, boolean turnPick,
+                                               boolean customBalance) {
         if (playerIds.size() != 4) {
             throw new EngineException("4인 전용 게임입니다 (현재 " + playerIds.size() + "명)");
         }
@@ -109,9 +126,10 @@ public final class GameSetup {
         state.setRngSeed(seed);
         state.setPhase("SETUP_BID");
         state.setRound(0);
+        state.setCustomBalance(customBalance);
 
         generateMap(data, state, rng.nextLong());
-        drawBoard(data, state.getBoard(), rng);
+        drawBoard(data, state.getBoard(), rng, customBalance);
 
         BoardState board = state.getBoard();
         board.setBidTurnPick(turnPick);
@@ -247,7 +265,7 @@ public final class GameSetup {
 
     // ── 보드 타일 드로우 ──────────────────────────────────────
 
-    private static void drawBoard(GameData data, BoardState board, Random rng) {
+    private static void drawBoard(GameData data, BoardState board, Random rng, boolean customBalance) {
         board.setRoundScoringTiles(draw(ids(data.tiles().get("roundScoringTiles")), 6, rng));
         board.setFinalScoringTiles(draw(ids(data.tiles().get("finalScoringTiles")), 2, rng));
 
@@ -284,8 +302,12 @@ public final class GameSetup {
             board.getExpansionTechShips().put("EXPANSION_" + (i + 1), techShips.get(i));
         }
 
-        // 고급 타일 7장: 트랙 6 + COMMON
-        List<String> advDraw = draw(ids(data.tech().get("advancedTiles")), 7, rng);
+        // 고급 타일 7장: 트랙 6 + COMMON — Custom 밸런스: 연방 토큰 고급 타일(ADV_TILE_13) 풀에서 제외
+        List<String> advancedPool = ids(data.tech().get("advancedTiles"));
+        if (customBalance) {
+            advancedPool.remove("ADV_TILE_13");
+        }
+        List<String> advDraw = draw(advancedPool, 7, rng);
         for (int i = 0; i < 6; i++) {
             board.getAdvTechOffers().put(trackNames[i], advDraw.get(i));
         }
@@ -364,6 +386,13 @@ public final class GameSetup {
         p.setBowl1(start.get("bowl1").asInt());
         p.setBowl2(start.get("bowl2").asInt());
         p.setBowl3(start.get("bowl3").asInt());
+        // Custom 밸런스: 란티다 시작 신용 15 · 파워 2/2/0
+        if (state.isCustomBalance() && "LANTIDS".equals(factionId)) {
+            p.setCredits(15);
+            p.setBowl1(2);
+            p.setBowl2(2);
+            p.setBowl3(0);
+        }
         if (start.has("brainstone")) {
             p.setBrainstone(start.get("brainstone").asText());
         }

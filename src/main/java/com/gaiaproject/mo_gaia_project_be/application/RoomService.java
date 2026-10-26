@@ -244,10 +244,11 @@ public class RoomService {
                 .map(game -> ongoingView(game, userId)).toList();
     }
 
-    /** 완료 탭 — 내가 참가했던 완료 게임 (나간 뒤에도 다시 들어가서 최종 결과 확인) */
+    /** 완료 탭 — 완료된 다인 게임은 전체 공개(참가 여부 무관), 완료된 1인플 게임은 본인이 만든 것만 */
     @Transactional(readOnly = true)
     public List<RoomView> listMyFinished(UUID userId) {
-        return games.findFinishedByUserId(userId).stream()
+        return games.findByStatusOrderByCreatedAtDesc("FINISHED").stream()
+                .filter(game -> !isLocalMode(game) || userId.equals(game.getCreatedBy()))
                 .map(game -> ongoingView(game, userId)).toList();
     }
 

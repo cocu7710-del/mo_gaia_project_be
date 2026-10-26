@@ -29,6 +29,8 @@ public class GameState {
     private int nextDecisionNo = 1;
     /** 메인 액션 진행 중 — 결정 스택이 비면 턴을 넘긴다 */
     private boolean turnEndPending;
+    /** 방 생성 시 Custom 옵션으로 만들어졌는지 — 제작자 밸런스 패치(발타크 함대입장 비용 등) 적용 여부 */
+    private boolean customBalance;
     /** "q,r" → 헥스 */
     private Map<String, HexState> hexes = new LinkedHashMap<>();
     private List<Map<String, Object>> sectorPlacements = new ArrayList<>();

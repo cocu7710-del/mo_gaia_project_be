@@ -5,6 +5,7 @@ import com.gaiaproject.mo_gaia_project_be.engine.model.Decision;
 import com.gaiaproject.mo_gaia_project_be.engine.model.GameState;
 import com.gaiaproject.mo_gaia_project_be.engine.rules.GameData;
 import com.gaiaproject.mo_gaia_project_be.infra.jpa.UserAccountEntity;
+import com.gaiaproject.mo_gaia_project_be.infra.repo.GameRepository;
 import com.gaiaproject.mo_gaia_project_be.infra.repo.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +45,9 @@ class RoomFlowIntegrationTest {
 
     @Autowired
     GameData data;
+
+    @Autowired
+    GameRepository games;
 
     private UUID user(String nickname) {
         return users.findByNickname(nickname).orElseGet(() -> users.save(UserAccountEntity.builder()
@@ -146,6 +150,33 @@ class RoomFlowIntegrationTest {
 
         rooms.deleteRoom(room.id(), u1);
         assertThrows(IllegalArgumentException.class, () -> rooms.get(room.id()));
+    }
+
+    @Test
+    void 완료_탭은_다인_게임은_전체_공개하고_1인플_게임은_만든_사람만_본다() {
+        UUID host = user("f1");
+        UUID outsider = user("f2"); // 어느 게임에도 참가하지 않은 제3자
+
+        var multi = rooms.createRoom(host, "완료된_다인방",
+                new GameService.GameOptions(false, "FREE"));
+        var solo = rooms.createRoom(host, "완료된_1인플방",
+                new GameService.GameOptions(false, "FREE", null, null, true));
+        var multiEntity = games.findById(multi.id()).orElseThrow();
+        multiEntity.setStatus("FINISHED");
+        games.save(multiEntity);
+        var soloEntity = games.findById(solo.id()).orElseThrow();
+        soloEntity.setStatus("FINISHED");
+        games.save(soloEntity);
+
+        // 참가한 적 없는 제3자도 완료된 다인 게임은 보이지만, 남이 만든 1인플 게임은 안 보여야 한다
+        var outsiderView = rooms.listMyFinished(outsider).stream().map(RoomService.RoomView::id).toList();
+        assertTrue(outsiderView.contains(multi.id()));
+        assertTrue(!outsiderView.contains(solo.id()));
+
+        // 1인플을 만든 본인에게는 보여야 한다
+        var hostView = rooms.listMyFinished(host).stream().map(RoomService.RoomView::id).toList();
+        assertTrue(hostView.contains(multi.id()));
+        assertTrue(hostView.contains(solo.id()));
     }
 
     @Test

@@ -1550,6 +1550,10 @@ public class GameEngine {
             throw new EngineException("함대 입장은 플레이어당 최대 3회입니다");
         }
         int vpCost = faction.path("fleetEntryVp").asInt(fleet.get("entryVp").asInt());
+        // Custom 밸런스: 발타크 함대 입장 비용 7→5 (방 생성 시 선택)
+        if (state.isCustomBalance() && "BAL_TAKS".equals(p.getFaction())) {
+            vpCost = 5;
+        }
         if (p.getVp() < vpCost) {
             throw new EngineException("VP 부족 (함대 입장 비용: " + vpCost + ")");
         }
@@ -2533,9 +2537,11 @@ public class GameEngine {
         }
     }
 
-    /** 건물 보유 판정 — 란티다 기생 광산 포함, 가이아포머 제외 (포머는 건물이 아님) */
+    /** 건물 보유 판정 — 란티다 기생 광산 포함, 가이아포머·하이브 위성(우주정거장)은 건물이 아니므로 제외 */
     private static boolean hasBuildingOf(HexState h, String playerId) {
-        return (playerId.equals(h.getBuildingOwner()) && !"GAIAFORMER".equals(h.getBuildingType()))
+        return (playerId.equals(h.getBuildingOwner())
+                && !"GAIAFORMER".equals(h.getBuildingType())
+                && !"SPACE_STATION".equals(h.getBuildingType()))
                 || playerId.equals(h.getParasiteOwner());
     }
 

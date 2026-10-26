@@ -52,7 +52,7 @@ public class GameService {
      * localMode && !bidding: 비딩 없이 4종족 무작위 배정 후 바로 SETUP_MINES로 시작
      */
     public record GameOptions(boolean bidding, String undoPolicy, Integer leechTimerSeconds, String bidMode,
-                              boolean localMode) {
+                              boolean localMode, boolean customBalance) {
         public GameOptions {
             if (undoPolicy == null) {
                 undoPolicy = "FREE";
@@ -75,15 +75,20 @@ public class GameService {
         }
 
         public GameOptions(boolean bidding, String undoPolicy) {
-            this(bidding, undoPolicy, null, null, false);
+            this(bidding, undoPolicy, null, null, false, false);
         }
 
         public GameOptions(boolean bidding, String undoPolicy, Integer leechTimerSeconds) {
-            this(bidding, undoPolicy, leechTimerSeconds, null, false);
+            this(bidding, undoPolicy, leechTimerSeconds, null, false, false);
         }
 
         public GameOptions(boolean bidding, String undoPolicy, Integer leechTimerSeconds, String bidMode) {
-            this(bidding, undoPolicy, leechTimerSeconds, bidMode, false);
+            this(bidding, undoPolicy, leechTimerSeconds, bidMode, false, false);
+        }
+
+        public GameOptions(boolean bidding, String undoPolicy, Integer leechTimerSeconds, String bidMode,
+                           boolean localMode) {
+            this(bidding, undoPolicy, leechTimerSeconds, bidMode, localMode, false);
         }
 
         public Map<String, Object> asMap() {
@@ -96,6 +101,9 @@ public class GameService {
             }
             if (localMode) {
                 map.put("localMode", true);
+            }
+            if (customBalance) {
+                map.put("customBalance", true);
             }
             return map;
         }
@@ -208,6 +216,7 @@ public class GameService {
     public void startGame(GameEntity game, List<GamePlayerEntity> members) {
         Map<String, Object> options = codec.readMap(game.getOptions());
         boolean localMode = Boolean.TRUE.equals(options.get("localMode"));
+        boolean customBalance = Boolean.TRUE.equals(options.get("customBalance"));
         GameState state;
         if (Boolean.TRUE.equals(options.get("bidding"))) {
             List<String> playerIds;
@@ -219,11 +228,11 @@ public class GameService {
                 playerIds = members.stream().map(m -> m.getUserId().toString()).toList();
             }
             state = GameSetup.createWithBidding(gameData, game.getRngSeed(), playerIds,
-                    "PICK".equals(options.get("bidMode")));
+                    "PICK".equals(options.get("bidMode")), customBalance);
         } else if (localMode) {
             String host = members.get(0).getUserId().toString();
             List<String> playerIds = List.of(host + "#1", host + "#2", host + "#3", host + "#4");
-            state = GameSetup.createLocalRandom(gameData, game.getRngSeed(), playerIds);
+            state = GameSetup.createLocalRandom(gameData, game.getRngSeed(), playerIds, customBalance);
         } else {
             List<GameSetup.PlayerSeat> seats = new ArrayList<>();
             for (GamePlayerEntity member : members) {
@@ -232,7 +241,7 @@ public class GameService {
                 }
                 seats.add(new GameSetup.PlayerSeat(member.getUserId().toString(), member.getFaction()));
             }
-            state = GameSetup.create(gameData, game.getRngSeed(), seats);
+            state = GameSetup.create(gameData, game.getRngSeed(), seats, customBalance);
         }
         persistInitialState(game, state, "GAME_STARTED");
     }

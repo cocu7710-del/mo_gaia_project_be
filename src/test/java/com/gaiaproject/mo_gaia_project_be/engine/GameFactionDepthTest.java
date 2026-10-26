@@ -397,6 +397,35 @@ class GameFactionDepthTest {
         assertTrue(state.getDecisionStack().isEmpty()); // 리치 없음 ✅확정
     }
 
+    @Test
+    void 하이브_우주정거장은_깊은_구역_섹터_건물_수에_포함되지_않는다() {
+        GameState state = depthGame();
+        PlayerState p3 = state.player("p3");
+        p3.setQic(20);
+        p3.getTechTiles().add("ADV_TILE_11"); // 패스: 깊은 구역 섹터당 2vp
+        state.setActivePlayer("p3");
+
+        String emptyKey = findHex(state, h -> "EMPTY".equals(h.getPlanet()) && !h.hasBuilding()
+                && h.getSatelliteOwners().isEmpty() && h.getShip() == null
+                && h.getSectorId() != null && h.getSectorId().startsWith("DEEP_"));
+        HexCoord target = HexCoord.parse(emptyKey);
+        int qic = EngineTestSupport.qicForRange(state, "p3", target, 1);
+
+        engine.apply(state, new GameEngine.Submit("p3", "ACTION_SPECIAL", null,
+                Map.of("source", "FACTION", "id", "PI_ACTION_SPACE_STATION",
+                        "hexQ", target.q(), "hexR", target.r(), "qicForRange", qic)));
+        assertEquals("SPACE_STATION", state.getHexes().get(emptyKey).getBuildingType());
+
+        state.setActivePlayer("p3");
+        state.setTurnEndPending(false); // 우주정거장 배치가 이번 턴의 메인 액션이었던 것을 테스트 편의상 되돌림
+        int vpBefore = p3.getVp();
+        String freeBooster = state.getBoard().getBoosterHolders().entrySet().stream()
+                .filter(e -> e.getValue() == null).map(Map.Entry::getKey).findFirst().orElseThrow();
+        engine.apply(state, new GameEngine.Submit("p3", "ACTION_PASS", null, Map.of("booster", freeBooster)));
+        // 우주정거장만 있을 뿐 실제 건물이 없으므로 깊은 구역 보너스(2vp)가 발동하지 않아야 한다
+        assertEquals(vpBefore, p3.getVp());
+    }
+
     // ═══ 아이타 가이아 페이즈 ═══
 
     @Test
